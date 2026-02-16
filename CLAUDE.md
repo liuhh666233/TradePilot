@@ -35,7 +35,7 @@ tradepilot/          # Python 后端
   scheduler/         # 定时任务
 
 webapp/              # React 前端
-  src/pages/         # 5 个页面 (Dashboard/StockAnalysis/SectorMap/Portfolio/Signals)
+  src/pages/         # 5 个页面 (Dashboard/StockAnalysis/SectorMap/Portfolio/TradePlan)
   src/services/      # API 调用封装
   src/components/    # 通用组件
 
