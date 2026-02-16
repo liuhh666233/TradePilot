@@ -5,13 +5,13 @@ import {
   LineChartOutlined,
   AppstoreOutlined,
   FundOutlined,
-  AlertOutlined,
+  FileTextOutlined,
 } from "@ant-design/icons";
 import Dashboard from "./pages/Dashboard";
 import StockAnalysis from "./pages/StockAnalysis";
 import SectorMap from "./pages/SectorMap";
 import Portfolio from "./pages/Portfolio";
-import Signals from "./pages/Signals";
+import TradePlan from "./pages/TradePlan";
 
 const { Sider, Content } = Layout;
 
@@ -20,7 +20,7 @@ const menuItems = [
   { key: "/analysis", icon: <LineChartOutlined />, label: <NavLink to="/analysis">个股分析</NavLink> },
   { key: "/sectors", icon: <AppstoreOutlined />, label: <NavLink to="/sectors">行业地图</NavLink> },
   { key: "/portfolio", icon: <FundOutlined />, label: <NavLink to="/portfolio">持仓管理</NavLink> },
-  { key: "/signals", icon: <AlertOutlined />, label: <NavLink to="/signals">信号中心</NavLink> },
+  { key: "/plans", icon: <FileTextOutlined />, label: <NavLink to="/plans">交易计划</NavLink> },
 ];
 
 function App() {
@@ -39,7 +39,7 @@ function App() {
             <Route path="/analysis" element={<StockAnalysis />} />
             <Route path="/sectors" element={<SectorMap />} />
             <Route path="/portfolio" element={<Portfolio />} />
-            <Route path="/signals" element={<Signals />} />
+            <Route path="/plans" element={<TradePlan />} />
           </Routes>
         </Content>
       </Layout>

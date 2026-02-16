@@ -73,4 +73,26 @@ def _init_tables(conn: duckdb.DuckDBPyConnection):
             direction VARCHAR, strength INTEGER,
             description VARCHAR
         );
+        CREATE TABLE IF NOT EXISTS trade_plan (
+            id INTEGER PRIMARY KEY,
+            stock_code VARCHAR NOT NULL,
+            stock_name VARCHAR NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status VARCHAR DEFAULT 'planning',
+            entry_target_price DOUBLE,
+            entry_quantity INTEGER,
+            entry_reason VARCHAR,
+            entry_conditions VARCHAR,
+            entry_triggered_at DATE,
+            entry_actual_price DOUBLE,
+            stop_loss_price DOUBLE,
+            stop_loss_pct DOUBLE DEFAULT -10,
+            stop_loss_conditions VARCHAR,
+            take_profit_price DOUBLE,
+            take_profit_pct DOUBLE DEFAULT 30,
+            take_profit_conditions VARCHAR,
+            risk_reward_ratio DOUBLE,
+            composite_score DOUBLE,
+            signal_summary VARCHAR
+        );
     """)

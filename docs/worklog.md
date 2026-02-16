@@ -6,48 +6,54 @@
 
 **后端 (tradepilot/)**
 - FastAPI 项目结构搭建 (main.py 入口 + CORS + 路由挂载)
-- DuckDB 初始化 (db.py, 10 张表: stock_daily/index_daily/etf_flow/margin_data/northbound_flow/stock_valuation/sector_data/portfolio/trades/signals)
-- Mock 数据 Provider (data/provider.py 抽象接口 + data/mock_provider.py 模拟实现)
-- API 路由:
-  - market.py: 股票列表/日K线/指数/ETF资金流/北向资金/两融/估值/行业数据
-  - portfolio.py: 持仓 CRUD + 交易记录
-  - analysis.py / signal.py: 骨架 (待实现)
+- DuckDB 初始化 (db.py, 10 张表)
+- Mock 数据 Provider (data/provider.py 抽象接口 + data/mock_provider.py)
+- API 路由: market.py / portfolio.py / analysis.py / signal.py 骨架
 
 **前端 (webapp/)**
 - 安装依赖: react-router-dom, antd, @ant-design/icons, @ant-design/charts
-- App.tsx: 侧边栏导航 + 5 页面路由
-- 页面骨架: Dashboard / StockAnalysis / SectorMap / Portfolio / Signals
+- App.tsx: 侧边栏导航 + 5 页面路由骨架
 - Vite 代理配置 (/api → localhost:8000)
-- 编译验证通过
 
 **文档 (docs/)**
-- 投资策略.md: 策略原文
-- 系统设计.md: 架构 + 策略需求 + 数据需求 + 8 个信号计算逻辑 + 表结构 + 实施计划
+- 投资策略.md / 系统设计.md / .claude/rules/*.md / CLAUDE.md
+
+---
+
+### V1: 分析引擎 + 交易计划 + 前端页面
+
+**Step 1: 分析引擎 (6 个模块)**
+- [x] analysis/technical.py: MACD (EMA12/26, DIF, DEA, MACD柱) + 金叉/死叉 + 顶背离/底背离 + 成交量异动 (放量突破/高位缩量/地量)
+- [x] analysis/valuation.py: PB/PE 分位数 + 值博率计算
+- [x] analysis/fund_flow.py: ETF 资金流 + 北向资金 + 融资余额 + 综合市场情绪评分
+- [x] analysis/sector_rotation.py: 行业轮动排名 + 高位预警/低位机会 + 高切低建议
+- [x] analysis/signal.py: 综合信号评分 (技术面20% + 估值面15% + 资金面25% + 轮动10%)
+- [x] analysis/risk.py: 止盈止损评估 (固定比例 + 技术指标 + 市场情绪)
+
+**Step 2: 交易计划后端**
+- [x] db.py: 新增 trade_plan 表 (建仓/止损/止盈三阶段)
+- [x] api/trade_plan.py: 评估接口 + CRUD + 状态流转 + 监控止盈止损
+
+**Step 3: API 完善**
+- [x] api/analysis.py: 接入 technical/valuation/sector_rotation 引擎
+- [x] api/signal.py: 接入综合评分 + 市场情绪接口
+
+**Step 4: 前端页面 (5 个页面)**
+- [x] Dashboard: 4 区块 (大盘K线 + 资金面仪表盘 + 行业板块 + 持仓总览)
+- [x] StockAnalysis: 股票选择器 + K线+MACD图 + 估值面板 + 信号列表
+- [x] SectorMap: 行业涨跌幅排名 (5/20/60日) + 估值对比 + 高切低建议
+- [x] Portfolio: 持仓管理 + 交易记录 + 新增持仓
+- [x] TradePlan: 新建交易计划 (评估→设参→创建) + 计划列表 + 监控止盈止损
 
 ---
 
 ## 待执行
 
-### Phase 2: 技术分析引擎
-- [ ] analysis/technical.py: MACD 计算 (EMA12/26, DIF, DEA, MACD柱)
-- [ ] analysis/technical.py: 金叉/死叉检测, 顶背离/底背离检测
-- [ ] analysis/technical.py: 成交量异动信号 (放量突破/高位缩量/地量)
-- [ ] api/analysis.py: 接入技术分析引擎, 返回 MACD + 信号
-- [ ] 前端 Dashboard: 指数概览卡片 + K线图 + MACD 指标图
-- [ ] 前端 StockAnalysis: 股票选择器 + K线+MACD图 + 信号列表
-
-### Phase 3: 估值 + 行业轮动
-- [ ] analysis/valuation.py: PB/PE 分位数 + 值博率计算
-- [ ] analysis/sector_rotation.py: 行业涨幅排名 + 高切低逻辑
-- [ ] 前端 SectorMap: 行业热度地图 + 高切低建议
-
-### Phase 4: 资金面 + 综合信号
-- [ ] analysis/fund_flow.py: ETF 资金流/两融/北向资金分析
-- [ ] analysis/signal.py: 综合信号评分系统
-- [ ] analysis/risk.py: 抽离提醒 (风控)
-- [ ] 前端 Signals: 信号中心
-- [ ] 前端 Portfolio: 持仓管理 + 盈亏 + 抽离提醒
-
-### Phase 5: 接入真实数据
+### 接入真实数据
 - [ ] data/akshare_provider.py: 替换 Mock 为 AKShare
 - [ ] scheduler/jobs.py: 定时任务 (每日收盘后更新)
+
+### 优化
+- [ ] 前端 code-split (动态 import 减小 bundle)
+- [ ] 删除 DuckDB 文件后重新初始化的处理
+- [ ] 交易计划: 个股与板块关联映射

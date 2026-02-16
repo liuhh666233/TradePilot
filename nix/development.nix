@@ -24,7 +24,7 @@ in {
     };
 
     devShells.default = let
-      name = "YourPackageName";
+      name = "TradePilot";
 
       pythonForRepo = (pkgs-dev.python3.withPackages (p:
         with p; [

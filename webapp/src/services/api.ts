@@ -1,6 +1,39 @@
 const API_BASE = "/api";
 
-export async function fetchJson<T>(path: string): Promise<T> {
+async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`);
   return res.json();
 }
+
+// Market
+export const getStocks = () => fetchJson<{code: string; name: string}[]>("/market/stocks");
+export const getIndexDaily = (code: string) => fetchJson<any[]>(`/market/index_daily?index_code=${code}`);
+export const getStockDaily = (code: string) => fetchJson<any[]>(`/market/stock_daily?stock_code=${code}`);
+export const getEtfFlow = (code: string) => fetchJson<any[]>(`/market/etf_flow?etf_code=${code}`);
+export const getNorthbound = () => fetchJson<any[]>("/market/northbound");
+export const getMargin = () => fetchJson<any[]>("/market/margin");
+export const getSectors = () => fetchJson<any[]>("/market/sectors");
+export const getValuationData = (code: string) => fetchJson<any[]>(`/market/valuation?stock_code=${code}`);
+
+// Analysis
+export const getTechnical = (code: string) => fetchJson<any>(`/analysis/technical?stock_code=${code}`);
+export const getValuation = (code: string) => fetchJson<any>(`/analysis/valuation?stock_code=${code}`);
+export const getSectorRotation = () => fetchJson<any>("/analysis/sector_rotation");
+
+// Signal
+export const getSignals = (code: string) => fetchJson<any>(`/signal/list?stock_code=${code}`);
+export const getScore = (code: string) => fetchJson<any>(`/signal/score?stock_code=${code}`);
+export const getMarketSentiment = () => fetchJson<any>("/signal/market_sentiment");
+
+// Portfolio
+export const getPositions = () => fetchJson<any[]>("/portfolio/positions");
+export const addPosition = (data: any) => fetch(`${API_BASE}/portfolio/positions`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data) }).then(r => r.json());
+export const getTrades = () => fetchJson<any[]>("/portfolio/trades");
+
+// Trade Plan
+export const evaluateStock = (code: string) => fetchJson<any>(`/trade_plan/evaluate/${code}`);
+export const getPlans = (status?: string) => fetchJson<any[]>(`/trade_plan/list${status ? `?status=${status}` : ""}`);
+export const createPlan = (data: any) => fetch(`${API_BASE}/trade_plan/create`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data) }).then(r => r.json());
+export const updatePlanStatus = (id: number, data: any) => fetch(`${API_BASE}/trade_plan/${id}/status`, { method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data) }).then(r => r.json());
+export const monitorPlan = (id: number) => fetchJson<any>(`/trade_plan/${id}/monitor`);
+export const deletePlan = (id: number) => fetch(`${API_BASE}/trade_plan/${id}`, { method: "DELETE" }).then(r => r.json());

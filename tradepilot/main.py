@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from tradepilot.api import market, portfolio, analysis, signal
+from tradepilot.api import market, portfolio, analysis, signal, trade_plan
 
 app = FastAPI(title="TradePilot", version="0.1.0")
 
@@ -15,6 +15,7 @@ app.include_router(market.router, prefix="/api/market", tags=["market"])
 app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 app.include_router(signal.router, prefix="/api/signal", tags=["signal"])
+app.include_router(trade_plan.router, prefix="/api/trade_plan", tags=["trade_plan"])
 
 
 @app.get("/api/health")
