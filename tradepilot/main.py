@@ -1,0 +1,27 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from tradepilot.api import market, portfolio, analysis, signal
+
+app = FastAPI(title="TradePilot", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(market.router, prefix="/api/market", tags=["market"])
+app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
+app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
+app.include_router(signal.router, prefix="/api/signal", tags=["signal"])
+
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("tradepilot.main:app", host="0.0.0.0", port=8000, reload=True)

@@ -1,5 +1,50 @@
+import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import { Layout, Menu } from "antd";
+import {
+  DashboardOutlined,
+  LineChartOutlined,
+  AppstoreOutlined,
+  FundOutlined,
+  AlertOutlined,
+} from "@ant-design/icons";
+import Dashboard from "./pages/Dashboard";
+import StockAnalysis from "./pages/StockAnalysis";
+import SectorMap from "./pages/SectorMap";
+import Portfolio from "./pages/Portfolio";
+import Signals from "./pages/Signals";
+
+const { Sider, Content } = Layout;
+
+const menuItems = [
+  { key: "/", icon: <DashboardOutlined />, label: <NavLink to="/">仪表盘</NavLink> },
+  { key: "/analysis", icon: <LineChartOutlined />, label: <NavLink to="/analysis">个股分析</NavLink> },
+  { key: "/sectors", icon: <AppstoreOutlined />, label: <NavLink to="/sectors">行业地图</NavLink> },
+  { key: "/portfolio", icon: <FundOutlined />, label: <NavLink to="/portfolio">持仓管理</NavLink> },
+  { key: "/signals", icon: <AlertOutlined />, label: <NavLink to="/signals">信号中心</NavLink> },
+];
+
 function App() {
-  return <h1>Hello World</h1>
+  return (
+    <BrowserRouter>
+      <Layout style={{ minHeight: "100vh" }}>
+        <Sider collapsible>
+          <div style={{ color: "#fff", textAlign: "center", padding: "16px", fontSize: "18px", fontWeight: "bold" }}>
+            TradePilot
+          </div>
+          <Menu theme="dark" mode="inline" defaultSelectedKeys={["/"]} items={menuItems} />
+        </Sider>
+        <Content style={{ padding: 24 }}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/analysis" element={<StockAnalysis />} />
+            <Route path="/sectors" element={<SectorMap />} />
+            <Route path="/portfolio" element={<Portfolio />} />
+            <Route path="/signals" element={<Signals />} />
+          </Routes>
+        </Content>
+      </Layout>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
