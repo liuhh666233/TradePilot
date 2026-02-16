@@ -49,6 +49,30 @@
 
 ## 待执行
 
+### 紧急 Bug 修复
+
+**Bug 1: 情绪评分双计北向、漏计融资**
+- 文件: `tradepilot/analysis/fund_flow.py:94`
+- 问题: `score += nb_result["trend_days"] * 2` 应为 `margin_result["trend_days"]`
+- 影响: 北向资金趋势被计算两次，融资余额趋势完全被忽略
+
+**Bug 2: 周线MACD用日线模拟，方法论错误**
+- 文件: `tradepilot/analysis/risk.py:27`
+- 问题: `detect_cross(df.tail(10))` 注释称"周线死叉"，实际是日线MACD
+- 影响: 止损条件误导，周线MACD需用周收盘价序列重新计算
+
+**Bug 3: 止盈评估缺少关键参数**
+- 文件: `tradepilot/api/trade_plan.py:189`
+- 问题: `evaluate_take_profit()` 未传入 `market_sentiment` 和 `sector_position`
+- 影响: "市场情绪过热"和"板块高位预警"两个止盈条件永远不触发
+
+### P0 功能缺失
+
+- [ ] 周线/月线K线聚合 → 真正的周线MACD信号
+- [ ] 申万行业分类数据 → 个股↔板块映射
+- [ ] 分批建仓/止盈逻辑 → trade_plan 状态机扩展
+- [ ] 时间止损 → 持仓天数监控
+
 ### 接入真实数据
 - [ ] data/akshare_provider.py: 替换 Mock 为 AKShare
 - [ ] scheduler/jobs.py: 定时任务 (每日收盘后更新)
@@ -56,4 +80,3 @@
 ### 优化
 - [ ] 前端 code-split (动态 import 减小 bundle)
 - [ ] 删除 DuckDB 文件后重新初始化的处理
-- [ ] 交易计划: 个股与板块关联映射
