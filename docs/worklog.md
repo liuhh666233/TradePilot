@@ -62,17 +62,28 @@
 
 ## 待执行
 
-### P0 功能缺失
+### Phase 2a: 自选股 + 基础设施
 
-- [ ] 周线/月线K线聚合 → 真正的周线MACD信号
+- [ ] watchlist 表 + CRUD API + 前端页面
+- [ ] 日K→周K/月K聚合函数 + 周线MACD
 - [ ] 申万行业分类数据 → 个股↔板块映射
-- [ ] 分批建仓/止盈逻辑 → trade_plan 状态机扩展
-- [ ] 时间止损 → 持仓天数监控
+- [ ] 政策面手动标注字段（全局评分 + 自选股级别标注）
 
-### 接入真实数据
-- [ ] data/akshare_provider.py: 替换 Mock 为 AKShare
-- [ ] scheduler/jobs.py: 定时任务 (每日收盘后更新)
+### Phase 2b: 每日扫描引擎（核心）
+
+- [ ] scan_watchlist() — 遍历自选股生成建仓建议
+- [ ] scan_positions() — 遍历持仓生成止损/止盈建议
+- [ ] daily_report 表 + API
+- [ ] Dashboard 新增"今日建议"卡片
+
+### Phase 2c: 精细化
+
+- [ ] 分批建仓/止盈逻辑 → trade_plan 状态机扩展
+- [ ] 时间止损（持仓天数监控）
+- [ ] 定时任务（盘后自动扫描）
+- [ ] 接入真实数据 (AKShare)
 
 ### 优化
+
 - [ ] 前端 code-split (动态 import 减小 bundle)
 - [ ] 删除 DuckDB 文件后重新初始化的处理
