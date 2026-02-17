@@ -7,6 +7,7 @@ async function fetchJson<T>(path: string): Promise<T> {
 
 // Market
 export const getStocks = () => fetchJson<{code: string; name: string}[]>("/market/stocks");
+export const getIndices = () => fetchJson<{code: string; name: string}[]>("/market/indices");
 export const getIndexDaily = (code: string) => fetchJson<any[]>(`/market/index_daily?index_code=${code}`);
 export const getStockDaily = (code: string) => fetchJson<any[]>(`/market/stock_daily?stock_code=${code}`);
 export const getEtfFlow = (code: string) => fetchJson<any[]>(`/market/etf_flow?etf_code=${code}`);

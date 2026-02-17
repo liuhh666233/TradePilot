@@ -91,7 +91,7 @@ def compute_market_sentiment(etf_result: dict, nb_result: dict, margin_result: d
         score += max(nb_result["net_5d"] / 1e10 * 5, -10)
 
     # 融资余额趋势
-    score += nb_result["trend_days"] * 2
+    score += margin_result["trend_days"] * 2
 
     score = max(0, min(100, score))
     if score >= 80:

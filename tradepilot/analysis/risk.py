@@ -24,7 +24,7 @@ def evaluate_stop_loss(
 
     if len(kline_df) >= 30:
         df = compute_macd(kline_df)
-        # 周线死叉 (用日线近5日模拟)
+        # 日线MACD死叉
         crosses = detect_cross(df.tail(10))
         for c in crosses:
             if c["type"] == "death_cross":

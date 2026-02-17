@@ -185,8 +185,26 @@ def monitor_plan(plan_id: int):
     kline = _provider.get_stock_daily(plan["stock_code"], "2024-01-01", "2025-12-31")
     current_price = float(kline["close"].iloc[-1])
 
+    # 获取市场情绪和板块位置，传入止盈评估
+    nb_df = _provider.get_northbound_flow("2024-01-01", "2025-12-31")
+    margin_df = _provider.get_margin_data("2024-01-01", "2025-12-31")
+    etf_results = {}
+    for code in ["510050", "510300", "510500", "512100"]:
+        etf_df = _provider.get_etf_flow(code, "2024-01-01", "2025-12-31")
+        etf_results.update(analyze_etf_flow(etf_df))
+    nb_result = analyze_northbound(nb_df)
+    margin_result = analyze_margin(margin_df)
+    sentiment = compute_market_sentiment(etf_results, nb_result, margin_result)
+
+    sector_df = _provider.get_sector_data("2024-01-01", "2025-12-31")
+    sector_result = analyze_sectors(sector_df)
+    sector_position = None
+    for h in sector_result.get("high_positions", []):
+        sector_position = "high"
+        break
+
     sl = evaluate_stop_loss(plan["entry_actual_price"], current_price, plan["stop_loss_pct"], kline)
-    tp = evaluate_take_profit(plan["entry_actual_price"], current_price, plan["take_profit_pct"], kline)
+    tp = evaluate_take_profit(plan["entry_actual_price"], current_price, plan["take_profit_pct"], kline, sentiment, sector_position)
 
     return {"plan": plan, "current_price": current_price, "stop_loss": sl, "take_profit": tp}
 

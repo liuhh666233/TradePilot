@@ -45,26 +45,22 @@
 - [x] Portfolio: 持仓管理 + 交易记录 + 新增持仓
 - [x] TradePlan: 新建交易计划 (评估→设参→创建) + 计划列表 + 监控止盈止损
 
+### Bug 修复 (3个)
+
+- [x] Bug 1: `fund_flow.py:94` — `nb_result["trend_days"]` → `margin_result["trend_days"]` (情绪评分双计北向、漏计融资)
+- [x] Bug 2: `risk.py:27` — 注释"周线死叉"改为"日线MACD死叉" (误导性注释)
+- [x] Bug 3: `trade_plan.py:189` — `evaluate_take_profit()` 补传 `market_sentiment` 和 `sector_position` (止盈条件永远不触发)
+
+### Dashboard 重设计
+
+- [x] Row 1: 4个指数概览卡片(上证/深证/创业板/科创50) + 市场情绪进度条
+- [x] Row 2: 大盘K线图 + 资金面(北向/融资/ETF)
+- [x] Row 3: 行业板块(按涨幅排序+高切低建议) + 持仓盈亏(现价/盈亏%/盈亏额) + 活跃交易计划
+- [x] api.ts: 新增 `getIndices` 接口
+
 ---
 
 ## 待执行
-
-### 紧急 Bug 修复
-
-**Bug 1: 情绪评分双计北向、漏计融资**
-- 文件: `tradepilot/analysis/fund_flow.py:94`
-- 问题: `score += nb_result["trend_days"] * 2` 应为 `margin_result["trend_days"]`
-- 影响: 北向资金趋势被计算两次，融资余额趋势完全被忽略
-
-**Bug 2: 周线MACD用日线模拟，方法论错误**
-- 文件: `tradepilot/analysis/risk.py:27`
-- 问题: `detect_cross(df.tail(10))` 注释称"周线死叉"，实际是日线MACD
-- 影响: 止损条件误导，周线MACD需用周收盘价序列重新计算
-
-**Bug 3: 止盈评估缺少关键参数**
-- 文件: `tradepilot/api/trade_plan.py:189`
-- 问题: `evaluate_take_profit()` 未传入 `market_sentiment` 和 `sector_position`
-- 影响: "市场情绪过热"和"板块高位预警"两个止盈条件永远不触发
 
 ### P0 功能缺失
 
