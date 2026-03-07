@@ -64,6 +64,18 @@ class SyncResult(BaseModel):
     message: str
 
 
+class NewsSyncRequest(BaseModel):
+    """Request payload for a news sync."""
+
+    stock_codes: list[str] = Field(default_factory=list)
+
+
+class BilibiliSyncRequest(BaseModel):
+    """Request payload for a Bilibili video sync."""
+
+    video_urls: list[str] = Field(default_factory=list)
+
+
 class NewsItemRecord(BaseModel):
     """Raw news item persisted for later processing."""
 

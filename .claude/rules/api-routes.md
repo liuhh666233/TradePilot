@@ -16,6 +16,7 @@ FastAPI REST API 层，前端通过 `/api/*` 访问。
 | `tradepilot/api/analysis.py` | 技术分析/估值/行业轮动 (接入分析引擎) |
 | `tradepilot/api/signal.py` | 信号列表/综合评分/市场情绪 |
 | `tradepilot/api/trade_plan.py` | 交易计划 (评估/CRUD/状态流转/监控止盈止损) |
+| `tradepilot/api/collector.py` | 数据接入手动 sync (market/news/bilibili) |
 
 ## API 路径
 
@@ -45,3 +46,8 @@ FastAPI REST API 层，前端通过 `/api/*` 访问。
 | `/api/trade_plan/{id}/status` | PUT | 更新计划状态 |
 | `/api/trade_plan/{id}/monitor` | GET | 监控止盈止损 |
 | `/api/trade_plan/{id}` | DELETE | 删除计划 |
+| `/api/collector/market/sync` | POST | 手动同步行情数据 |
+| `/api/collector/news/sync` | POST | 手动同步新闻 |
+| `/api/collector/bilibili/sync` | POST | 手动同步 B 站视频 |
+| `/api/collector/runs` | GET | 同步运行历史 |
+| `/api/collector/status` | GET | 接入状态总览 |

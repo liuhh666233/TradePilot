@@ -6,7 +6,16 @@ from loguru import logger
 
 from tradepilot.data import MOCK_INDICES, MOCK_STOCKS, get_provider
 from tradepilot.db import get_conn
-from tradepilot.ingestion.models import IngestionRun, RunStatus, SourceType, SyncRequest, SyncResult, TriggerMode
+from tradepilot.ingestion.models import (
+    BilibiliSyncRequest,
+    IngestionRun,
+    NewsSyncRequest,
+    RunStatus,
+    SourceType,
+    SyncRequest,
+    SyncResult,
+    TriggerMode,
+)
 
 
 _STOCK_DAILY_COLS = "stock_code, date, open, high, low, close, volume, amount, turnover"
@@ -51,6 +60,60 @@ class IngestionService:
         run.finished_at = datetime.now()
         self._save_run(run)
         return SyncResult(run=run, message=f"market sync {run.status.value}")
+
+    def sync_news(self, request: NewsSyncRequest) -> SyncResult:
+        """Run a news sync and persist its execution history."""
+        run = IngestionRun(
+            id=int(datetime.now().timestamp() * 1000),
+            job_name="news_sync",
+            source_type=SourceType.NEWS,
+            trigger_mode=TriggerMode.MANUAL,
+            status=RunStatus.RUNNING,
+            started_at=datetime.now(),
+        )
+        try:
+            from tradepilot.collector.news import NewsCollector
+
+            collector = NewsCollector()
+            items = collector.collect(stock_codes=request.stock_codes or None)
+            run.status = RunStatus.SUCCESS
+            run.records_discovered = len(items)
+            run.records_inserted = len(items)
+        except Exception as exc:
+            logger.exception("news sync failed")
+            run.status = RunStatus.FAILED
+            run.error_message = str(exc)
+
+        run.finished_at = datetime.now()
+        self._save_run(run)
+        return SyncResult(run=run, message=f"news sync {run.status.value}")
+
+    def sync_bilibili(self, request: BilibiliSyncRequest) -> SyncResult:
+        """Run a Bilibili video sync and persist its execution history."""
+        run = IngestionRun(
+            id=int(datetime.now().timestamp() * 1000),
+            job_name="bilibili_sync",
+            source_type=SourceType.BILIBILI,
+            trigger_mode=TriggerMode.MANUAL,
+            status=RunStatus.RUNNING,
+            started_at=datetime.now(),
+        )
+        try:
+            from tradepilot.collector.bilibili import BilibiliCollector
+
+            collector = BilibiliCollector()
+            items = collector.collect(video_urls=request.video_urls or None)
+            run.status = RunStatus.SUCCESS
+            run.records_discovered = len(items)
+            run.records_inserted = len(items)
+        except Exception as exc:
+            logger.exception("bilibili sync failed")
+            run.status = RunStatus.FAILED
+            run.error_message = str(exc)
+
+        run.finished_at = datetime.now()
+        self._save_run(run)
+        return SyncResult(run=run, message=f"bilibili sync {run.status.value}")
 
     def get_runs(self) -> list[dict]:
         """Return ingestion run history."""

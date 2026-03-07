@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from tradepilot.ingestion.models import SyncRequest, SyncResult
+from tradepilot.ingestion.models import BilibiliSyncRequest, NewsSyncRequest, SyncRequest, SyncResult
 from tradepilot.ingestion.service import IngestionService
 
 router = APIRouter()
@@ -15,6 +15,22 @@ def market_sync(request: SyncRequest | None = None) -> SyncResult:
     if request is None:
         request = SyncRequest()
     return _service.sync_market(request)
+
+
+@router.post("/news/sync")
+def news_sync(request: NewsSyncRequest | None = None) -> SyncResult:
+    """Trigger a manual news sync."""
+    if request is None:
+        request = NewsSyncRequest()
+    return _service.sync_news(request)
+
+
+@router.post("/bilibili/sync")
+def bilibili_sync(request: BilibiliSyncRequest | None = None) -> SyncResult:
+    """Trigger a manual Bilibili video sync."""
+    if request is None:
+        request = BilibiliSyncRequest()
+    return _service.sync_bilibili(request)
 
 
 @router.get("/runs")
