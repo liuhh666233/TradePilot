@@ -6,6 +6,14 @@ in {
   # Define custom overlays for development packages
   flake.overlays = {
     dev = inputs.nixpkgs.lib.composeManyExtensions [
+      (final: prev: {
+        pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
+          (python-final: python-prev: {
+            akracer = python-final.callPackage ./pkgs/python/akracer { };
+            akshare = python-final.callPackage ./pkgs/python/akshare { };
+          })
+        ];
+      })
 
       (final: prev: with inputs; let system = prev.system; in { })
 
@@ -41,6 +49,7 @@ in {
           pendulum
           pudb
           rich
+          akshare
 
           # Jupyter
           jupyterlab
