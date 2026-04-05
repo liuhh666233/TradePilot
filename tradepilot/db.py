@@ -97,6 +97,32 @@ def _init_tables(conn: duckdb.DuckDBPyConnection):
             records_updated BIGINT DEFAULT 0, records_failed BIGINT DEFAULT 0,
             error_message VARCHAR
         );
+        CREATE TABLE IF NOT EXISTS daily_scan_results (
+            id BIGINT PRIMARY KEY,
+            scan_date DATE NOT NULL,
+            stock_code VARCHAR NOT NULL,
+            stock_name VARCHAR,
+            action VARCHAR,
+            urgency VARCHAR,
+            score DOUBLE,
+            reasons VARCHAR,
+            risk_alerts VARCHAR,
+            suggested_price DOUBLE,
+            suggested_stop_loss DOUBLE,
+            suggested_take_profit VARCHAR,
+            UNIQUE (scan_date, stock_code)
+        );
+        CREATE TABLE IF NOT EXISTS alerts (
+            id BIGINT PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            alert_type VARCHAR NOT NULL,
+            urgency VARCHAR DEFAULT 'medium',
+            stock_code VARCHAR,
+            sector VARCHAR,
+            title VARCHAR NOT NULL,
+            message TEXT,
+            read_at TIMESTAMP
+        );
         CREATE TABLE IF NOT EXISTS portfolio (
             id INTEGER PRIMARY KEY,
             stock_code VARCHAR, stock_name VARCHAR,
