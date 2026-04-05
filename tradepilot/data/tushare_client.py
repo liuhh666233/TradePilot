@@ -33,8 +33,43 @@ def _empty_frame(columns: tuple[str, ...]) -> pd.DataFrame:
     return pd.DataFrame({column: pd.Series(dtype="object") for column in columns})
 
 
+def _empty_with_columns(*columns: str) -> pd.DataFrame:
+    return pd.DataFrame({column: pd.Series(dtype="object") for column in columns})
+
+
 def _to_tushare_date(value: str) -> str:
     return value.replace("-", "")
+
+
+def _with_exchange_suffix(code: str, *, kind: str) -> str:
+    normalized = code.strip().upper()
+    if "." in normalized:
+        return normalized
+    if kind == "index":
+        exchange = "SZ" if normalized.startswith("399") else "SH"
+    elif kind == "fund":
+        exchange = "SH" if normalized.startswith(("5", "6")) else "SZ"
+    else:
+        if normalized.startswith(("6", "9")):
+            exchange = "SH"
+        elif normalized.startswith(("4", "8")):
+            exchange = "BJ"
+        else:
+            exchange = "SZ"
+    return f"{normalized}.{exchange}"
+
+
+def _normalize_quotes(df: pd.DataFrame, code_column: str, code_value: str) -> pd.DataFrame:
+    normalized = df.rename(
+        columns={
+            "trade_date": "date",
+            "ts_code": code_column,
+            "vol": "volume",
+        }
+    ).copy()
+    normalized[code_column] = code_value
+    normalized["date"] = pd.to_datetime(normalized["date"], format="%Y%m%d", errors="coerce")
+    return normalized.sort_values("date").reset_index(drop=True)
 
 
 def _to_date_str(value: object) -> str | None:
@@ -56,6 +91,32 @@ class TushareClient:
     @property
     def enabled(self) -> bool:
         return self._pro is not None
+
+    def get_stock_catalog(self) -> pd.DataFrame:
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns("code", "name")
+        stocks = pro.stock_basic(exchange="", list_status="L", fields="symbol,name")
+        if stocks.empty:
+            return _empty_with_columns("code", "name")
+        normalized = stocks.rename(columns={"symbol": "code", "name": "name"}).copy()
+        return cast(pd.DataFrame, normalized.loc[:, ["code", "name"]].drop_duplicates().reset_index(drop=True))
+
+    def get_index_catalog(self) -> pd.DataFrame:
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns("code", "name")
+        frames: list[pd.DataFrame] = []
+        for market in ("SSE", "SZSE"):
+            frame = pro.index_basic(market=market, fields="ts_code,name")
+            if frame.empty:
+                continue
+            normalized = frame.rename(columns={"ts_code": "code", "name": "name"}).copy()
+            normalized["code"] = normalized["code"].str.split(".").str[0]
+            frames.append(cast(pd.DataFrame, normalized.loc[:, ["code", "name"]]))
+        if not frames:
+            return _empty_with_columns("code", "name")
+        return cast(pd.DataFrame, pd.concat(frames, ignore_index=True).drop_duplicates().reset_index(drop=True))
 
     def get_trade_calendar(
         self,
@@ -124,6 +185,179 @@ class TushareClient:
         if not rows:
             return _empty_frame(_MARKET_DAILY_STATS_COLUMNS)
         return pd.concat(rows, ignore_index=True)
+
+    def get_stock_daily(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns("date", "open", "high", "low", "close", "volume", "amount", "stock_code", "turnover")
+        symbol = _with_exchange_suffix(stock_code, kind="stock")
+        daily = pro.daily(
+            ts_code=symbol,
+            start_date=_to_tushare_date(start_date),
+            end_date=_to_tushare_date(end_date),
+            fields="ts_code,trade_date,open,high,low,close,vol,amount",
+        )
+        if daily.empty and stock_code.startswith(("1", "5")):
+            daily = pro.fund_daily(
+                ts_code=_with_exchange_suffix(stock_code, kind="fund"),
+                start_date=_to_tushare_date(start_date),
+                end_date=_to_tushare_date(end_date),
+                fields="ts_code,trade_date,open,high,low,close,vol,amount",
+            )
+        if daily.empty:
+            return _empty_with_columns("date", "open", "high", "low", "close", "volume", "amount", "stock_code", "turnover")
+        basic = pro.daily_basic(
+            ts_code=symbol,
+            start_date=_to_tushare_date(start_date),
+            end_date=_to_tushare_date(end_date),
+            fields="trade_date,turnover_rate",
+        )
+        normalized = _normalize_quotes(daily, "stock_code", stock_code)
+        if basic.empty:
+            normalized["turnover"] = None
+            return normalized.loc[:, ["date", "stock_code", "open", "high", "low", "close", "volume", "amount", "turnover"]]
+        turnover = basic.rename(columns={"trade_date": "date", "turnover_rate": "turnover"}).copy()
+        turnover["date"] = pd.to_datetime(turnover["date"], format="%Y%m%d", errors="coerce")
+        merged = normalized.merge(turnover, on="date", how="left")
+        return merged.loc[:, ["date", "stock_code", "open", "high", "low", "close", "volume", "amount", "turnover"]]
+
+    def get_stock_weekly(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        daily = self.get_stock_daily(stock_code, start_date, end_date)
+        if daily.empty:
+            return daily
+        weekly = cast(
+            pd.DataFrame,
+            daily.set_index("date")
+            .resample("W-FRI")
+            .agg(
+                {
+                    "stock_code": "last",
+                    "open": "first",
+                    "high": "max",
+                    "low": "min",
+                    "close": "last",
+                    "volume": "sum",
+                    "amount": "sum",
+                    "turnover": "mean",
+                }
+            )
+            .reset_index(),
+        )
+        weekly = weekly.dropna(subset=["stock_code", "open", "high", "low", "close"])
+        return weekly
+
+    def get_stock_monthly(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        daily = self.get_stock_daily(stock_code, start_date, end_date)
+        if daily.empty:
+            return daily
+        monthly = cast(
+            pd.DataFrame,
+            daily.set_index("date")
+            .resample("ME")
+            .agg(
+                {
+                    "stock_code": "last",
+                    "open": "first",
+                    "high": "max",
+                    "low": "min",
+                    "close": "last",
+                    "volume": "sum",
+                    "amount": "sum",
+                    "turnover": "mean",
+                }
+            )
+            .reset_index(),
+        )
+        monthly = monthly.dropna(subset=["stock_code", "open", "high", "low", "close"])
+        return monthly
+
+    def get_index_daily(self, index_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns("date", "open", "high", "low", "close", "volume", "amount", "index_code")
+        daily = pro.index_daily(
+            ts_code=_with_exchange_suffix(index_code, kind="index"),
+            start_date=_to_tushare_date(start_date),
+            end_date=_to_tushare_date(end_date),
+            fields="ts_code,trade_date,open,high,low,close,vol,amount",
+        )
+        if daily.empty:
+            return _empty_with_columns("date", "open", "high", "low", "close", "volume", "amount", "index_code")
+        normalized = _normalize_quotes(daily, "index_code", index_code)
+        return normalized.loc[:, ["date", "index_code", "open", "high", "low", "close", "volume", "amount"]]
+
+    def get_margin_data(self, start_date: str, end_date: str) -> pd.DataFrame:
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns("date", "stock_code", "margin_balance", "margin_buy")
+        rows: list[pd.DataFrame] = []
+        current = date.fromisoformat(start_date)
+        end = date.fromisoformat(end_date)
+        while current <= end:
+            trade_date = current.strftime("%Y%m%d")
+            for exchange_id in ("SSE", "SZSE"):
+                time.sleep(0.2)
+                daily = pro.margin(trade_date=trade_date, exchange_id=exchange_id)
+                if daily.empty:
+                    continue
+                normalized = daily.rename(
+                    columns={
+                        "trade_date": "date",
+                        "rzye": "margin_balance",
+                        "rzmre": "margin_buy",
+                    }
+                ).copy()
+                normalized["stock_code"] = exchange_id
+                normalized["date"] = pd.to_datetime(normalized["date"], format="%Y%m%d", errors="coerce")
+                rows.append(normalized.loc[:, ["date", "stock_code", "margin_balance", "margin_buy"]])
+            current += timedelta(days=1)
+        if not rows:
+            return _empty_with_columns("date", "stock_code", "margin_balance", "margin_buy")
+        return pd.concat(rows, ignore_index=True)
+
+    def get_northbound_flow(self, start_date: str, end_date: str) -> pd.DataFrame:
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns("date", "net_buy", "buy_amount", "sell_amount")
+        daily = pro.moneyflow_hsgt(
+            start_date=_to_tushare_date(start_date),
+            end_date=_to_tushare_date(end_date),
+            fields="trade_date,hgt,sgt,north_money",
+        )
+        if daily.empty:
+            return _empty_with_columns("date", "net_buy", "buy_amount", "sell_amount")
+        normalized = daily.rename(columns={"trade_date": "date", "north_money": "net_buy", "hgt": "buy_amount", "sgt": "sell_amount"}).copy()
+        normalized["date"] = pd.to_datetime(normalized["date"], format="%Y%m%d", errors="coerce")
+        return normalized.loc[:, ["date", "net_buy", "buy_amount", "sell_amount"]].sort_values("date").reset_index(drop=True)
+
+    def get_stock_valuation(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns("stock_code", "date", "pe_ttm", "pb", "ps", "market_cap")
+        daily = pro.daily_basic(
+            ts_code=_with_exchange_suffix(stock_code, kind="stock"),
+            start_date=_to_tushare_date(start_date),
+            end_date=_to_tushare_date(end_date),
+            fields="ts_code,trade_date,pe_ttm,pb,ps,ps_ttm,total_mv",
+        )
+        if daily.empty:
+            return _empty_with_columns("stock_code", "date", "pe_ttm", "pb", "ps", "market_cap")
+        normalized = daily.rename(
+            columns={
+                "trade_date": "date",
+                "pe_ttm": "pe_ttm",
+                "pb": "pb",
+                "ps": "ps",
+                "ps_ttm": "ps_ttm",
+                "total_mv": "market_cap",
+            }
+        ).copy()
+        normalized["date"] = pd.to_datetime(normalized["date"], format="%Y%m%d", errors="coerce")
+        normalized["stock_code"] = stock_code
+        if "ps" not in normalized.columns and "ps_ttm" in normalized.columns:
+            normalized["ps"] = normalized["ps_ttm"]
+        normalized["ps"] = normalized["ps"].where(normalized["ps"].notna(), normalized.get("ps_ttm"))
+        return normalized.loc[:, ["stock_code", "date", "pe_ttm", "pb", "ps", "market_cap"]].sort_values("date").reset_index(drop=True)
 
     def is_trading_day(self, target_date: str, exchange: str = "SSE") -> bool:
         frame = self.get_trade_calendar(target_date, target_date, exchange=exchange)

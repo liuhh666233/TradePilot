@@ -36,6 +36,16 @@ def _gen_ohlcv(dates: pd.DatetimeIndex, base_price: float) -> pd.DataFrame:
 class MockProvider(DataProvider):
     """Generate deterministic mock market data for local development."""
 
+    def get_stock_catalog(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [{"code": code, "name": name} for code, name in MOCK_STOCKS.items()]
+        )
+
+    def get_index_catalog(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [{"code": code, "name": name} for code, name in MOCK_INDICES.items()]
+        )
+
     def get_stock_daily(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         dates = pd.bdate_range(start_date, end_date)
         base = _RNG.uniform(10, 200)
@@ -99,7 +109,7 @@ class MockProvider(DataProvider):
         return pd.DataFrame({
             "date": dates, "etf_code": etf_code,
             "net_inflow": _RNG.normal(0, 5e8, n),
-            "volume": _RNG.integers(1e7, 1e9, n),
+            "volume": _RNG.integers(10_000_000, 1_000_000_000, n),
         })
 
     def get_margin_data(self, start_date: str, end_date: str) -> pd.DataFrame:

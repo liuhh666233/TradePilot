@@ -6,7 +6,8 @@ import time
 
 from loguru import logger
 
-from tradepilot.data import MOCK_INDICES, MOCK_STOCKS, get_provider
+from tradepilot.config import DATA_PROVIDER, DataProviderType
+from tradepilot.data import get_provider
 from tradepilot.db import get_conn
 from tradepilot.ingestion.models import (
     BilibiliSyncRequest,
@@ -147,8 +148,10 @@ class IngestionService:
         provider = get_provider()
         conn = get_conn()
 
-        stock_codes = request.stock_codes or list(MOCK_STOCKS.keys())[:3]
-        index_codes = request.index_codes or list(MOCK_INDICES.keys())[:2]
+        stock_codes = request.stock_codes
+        index_codes = request.index_codes
+        if DATA_PROVIDER != DataProviderType.MOCK and not stock_codes and not index_codes:
+            raise ValueError("stock_codes or index_codes is required when DATA_PROVIDER is not MOCK")
 
         inserted = 0
         for stock_code in stock_codes:

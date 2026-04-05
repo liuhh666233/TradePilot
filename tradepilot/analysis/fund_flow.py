@@ -11,9 +11,10 @@ def analyze_etf_flow(etf_df: pd.DataFrame) -> dict:
     for code, group in etf_df.groupby("etf_code"):
         group = group.sort_values("date")
         recent5 = group.tail(5)
-        net_5d = recent5["net_inflow"].sum()
+        recent_net = recent5["net_inflow"].fillna(0)
+        net_5d = recent_net.sum()
         consecutive = 0
-        for v in reversed(recent5["net_inflow"].values):
+        for v in reversed(recent_net.values):
             if (v > 0 and consecutive >= 0) or (consecutive == 0):
                 consecutive = consecutive + 1 if v > 0 else -1
             elif v < 0 and consecutive <= 0:
@@ -22,7 +23,7 @@ def analyze_etf_flow(etf_df: pd.DataFrame) -> dict:
                 break
         result[code] = {
             "net_5d": round(float(net_5d), 2),
-            "latest": round(float(recent5["net_inflow"].iloc[-1]), 2) if len(recent5) > 0 else 0,
+            "latest": round(float(recent_net.iloc[-1]), 2) if len(recent_net) > 0 else 0,
             "trend_days": consecutive,
         }
     return result
@@ -34,9 +35,10 @@ def analyze_northbound(nb_df: pd.DataFrame) -> dict:
         return {"net_5d": 0, "latest": 0, "trend_days": 0}
     nb_df = nb_df.sort_values("date")
     recent5 = nb_df.tail(5)
-    net_5d = recent5["net_buy"].sum()
+    recent_net = recent5["net_buy"].fillna(0)
+    net_5d = recent_net.sum()
     consecutive = 0
-    for v in reversed(recent5["net_buy"].values):
+    for v in reversed(recent_net.values):
         if consecutive == 0:
             consecutive = 1 if v > 0 else -1
         elif (v > 0 and consecutive > 0) or (v < 0 and consecutive < 0):
@@ -45,7 +47,7 @@ def analyze_northbound(nb_df: pd.DataFrame) -> dict:
             break
     return {
         "net_5d": round(float(net_5d), 2),
-        "latest": round(float(recent5["net_buy"].iloc[-1]), 2),
+        "latest": round(float(recent_net.iloc[-1]), 2),
         "trend_days": consecutive,
     }
 

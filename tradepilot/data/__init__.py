@@ -1,7 +1,6 @@
 """Structured data provider factory and exports."""
 
 from tradepilot.config import DATA_PROVIDER, DataProviderType
-from tradepilot.data.mock_provider import MOCK_ETFS, MOCK_INDICES, MOCK_STOCKS, MOCK_SECTORS, MockProvider
 from tradepilot.data.provider import DataProvider
 
 _provider: DataProvider | None = None
@@ -16,17 +15,16 @@ def get_provider() -> DataProvider:
         from tradepilot.data.akshare_provider import AKShareProvider
 
         _provider = AKShareProvider()
-    else:
+    elif DATA_PROVIDER == DataProviderType.MOCK:
+        from tradepilot.data.mock_provider import MockProvider
+
         _provider = MockProvider()
+    else:
+        raise ValueError(f"unsupported DATA_PROVIDER: {DATA_PROVIDER}")
     return _provider
 
 
 __all__ = [
     "DataProvider",
-    "MOCK_ETFS",
-    "MOCK_INDICES",
-    "MOCK_SECTORS",
-    "MOCK_STOCKS",
-    "MockProvider",
     "get_provider",
 ]

@@ -48,6 +48,13 @@ TradePilot 是一个面向 A 股投资决策的本地化看板系统，目标不
   - 如需走真实行情链路，需要切到 AKShare provider 并配置对应环境
 - **DuckDB**：本地分析库与运行历史存储
 
+### 当前已知问题
+
+- `GET /api/signal/market_sentiment`：当前不可用。真实数据链路在 AKShare/Tushare 串行调用下耗时过长，接口在现有同步实现中会超时。
+- `POST /api/briefing/scan/run`：当前不可用。扫描流程依赖 `market_sentiment` 与多段结构化数据拉取，现阶段无法在可接受时间内稳定返回。
+- TODO：为外部数据请求补充单次超时与 fail-fast 策略，并缩短 `market_sentiment` 默认查询窗口。
+- TODO：将 `scan/run` 改为后台任务模式或拆分扫描阶段，避免单个同步请求阻塞。
+
 ---
 
 ## 技术栈
