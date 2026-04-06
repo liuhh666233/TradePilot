@@ -1396,15 +1396,20 @@ class DailyWorkflowService:
         sector_metadata = watch_context.get("sector_metadata", {})
         sector_stocks = conn.execute(
             """
-            SELECT sector, stock_name
+            SELECT sector, stock_code, stock_name
             FROM sector_stocks
             WHERE as_of_date = ?
             """,
             [workflow_date],
         ).fetchdf().to_dict(orient="records")
-        sector_stock_map: dict[str, list[str]] = {}
+        sector_stock_map: dict[str, list[dict[str, str]]] = {}
         for row in sector_stocks:
-            sector_stock_map.setdefault(str(row.get("sector") or ""), []).append(str(row.get("stock_name") or ""))
+            sector_stock_map.setdefault(str(row.get("sector") or ""), []).append(
+                {
+                    "code": str(row.get("stock_code") or ""),
+                    "name": str(row.get("stock_name") or ""),
+                }
+            )
 
         if not records:
             logger.warning("sector positioning falls back to watchlist-only mode")
@@ -1434,7 +1439,9 @@ class DailyWorkflowService:
         enriched_records = []
         for item in records:
             sector_name = item.get("sector")
-            leader_stock = item.get("leader") or next((name for name in sector_stock_map.get(str(sector_name), []) if name), None)
+            leader_candidate = next((stock for stock in sector_stock_map.get(str(sector_name), []) if stock.get("name")), None)
+            leader_stock = item.get("leader") or (leader_candidate or {}).get("name")
+            leader_stock_code = item.get("leader_code") or (leader_candidate or {}).get("code")
             net_flow = None
             change_1d = item.get("change_1d")
             if change_1d is not None:
@@ -1443,6 +1450,7 @@ class DailyWorkflowService:
                 {
                     **item,
                     "leader_stock": leader_stock,
+                    "leader_stock_code": leader_stock_code,
                     "net_flow": net_flow,
                 }
             )
@@ -1454,6 +1462,7 @@ class DailyWorkflowService:
                 "pct_change": item.get("change_1d"),
                 "net_flow": item.get("net_flow"),
                 "leader_stock": item.get("leader_stock"),
+                "leader_stock_code": item.get("leader_stock_code"),
             }
             for item in records[:10]
             if item.get("sector")
@@ -1464,6 +1473,7 @@ class DailyWorkflowService:
                 "pct_change": item.get("change_1d"),
                 "net_flow": item.get("net_flow"),
                 "leader_stock": item.get("leader_stock"),
+                "leader_stock_code": item.get("leader_stock_code"),
             }
             for item in records[-10:]
             if item.get("sector")
@@ -1487,6 +1497,7 @@ class DailyWorkflowService:
                     "trend_5d": self._trend_from_change(change_5d),
                     "consistency": consistency,
                     "leader_stock": matched.get("leader_stock") if matched else None,
+                    "leader_stock_code": matched.get("leader_stock_code") if matched else None,
                     "thesis": meta.get("thesis"),
                     "aliases": meta.get("report_aliases", []),
                     "observation_note": self._build_sector_observation_note(sector_label, matched, meta),

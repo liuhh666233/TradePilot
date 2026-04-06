@@ -1,25 +1,85 @@
 {
-  "watch_sectors": [
-    "AI应用",
-    "算力",
-    "电力"
-  ],
-  "watch_stocks": [
-    {
-      "code": "300418",
-      "name": "昆仑万维"
-    },
-    {
-      "code": "300244",
-      "name": "迪安诊断"
-    },
-    {
-      "code": "688111",
-      "name": "金山办公"
-    },
-    {
-      "code": "300478",
-      "name": "杭州高新"
-    }
-  ]
+  "positions": {
+    "sectors": [
+      {
+        "name": "AI应用",
+        "role": "strategic",
+        "thesis": "主线观察方向，重点看风险偏好修复后是否形成持续合力"
+      }
+    ],
+    "stocks": [
+      {
+        "code": "688111",
+        "name": "金山办公",
+        "role": "benchmark",
+        "theme": "AI应用",
+        "thesis": "作为 AI 应用标杆观察，重点看是否维持强度与主线地位",
+        "notes": "关注成交额、量价配合和板块共振"
+      },
+      {
+        "code": "300418",
+        "name": "昆仑万维",
+        "role": "strategic",
+        "theme": "AI应用",
+        "thesis": "观察 AI 应用修复时的弹性与持续性",
+        "notes": "重点看趋势延续和情绪带动"
+      }
+    ]
+  },
+  "watchlist": {
+    "sectors": [
+      {
+        "name": "AI应用",
+        "role": "strategic",
+        "thesis": "真正风险偏好修复后的核心进攻方向",
+        "report_aliases": ["人工智能", "计算机", "软件开发", "传媒"]
+      },
+      {
+        "name": "算力",
+        "role": "main_force",
+        "thesis": "若科技主线强化，算力链可能承担中军职责",
+        "report_aliases": ["算力租赁", "CPO", "光模块", "液冷", "数据中心", "服务器"]
+      },
+      {
+        "name": "电力",
+        "role": "defensive",
+        "thesis": "观察是否承接防御资金回流，还是仅阶段性过渡",
+        "report_aliases": ["电力", "公用事业", "火电", "水电", "绿电"]
+      }
+    ],
+    "stocks": [
+      {
+        "code": "300244",
+        "name": "迪安诊断",
+        "role": "watch_stock",
+        "theme": "AI应用",
+        "thesis": "低位候选，观察商业化与题材联动",
+        "notes": "重点看换手、承接与独立强度"
+      },
+      {
+        "code": "688111",
+        "name": "金山办公",
+        "role": "benchmark",
+        "theme": "AI应用",
+        "thesis": "AI 应用核心标杆，观察是否继续维持辨识度",
+        "notes": "关注主线地位和量价结构"
+      },
+      {
+        "code": "300418",
+        "name": "昆仑万维",
+        "role": "main_force",
+        "theme": "AI应用",
+        "thesis": "若 AI 应用主线强化，可能承担中军角色",
+        "notes": "关注板块共振与趋势延续"
+      },
+      {
+        "code": "300478",
+        "name": "杭州高新",
+        "role": "pathfinder",
+        "theme": "电力",
+        "thesis": "观察是否形成先锋信号或仅短线脉冲",
+        "notes": "重点看封板质量与持续性"
+      }
+    ]
+  }
 }

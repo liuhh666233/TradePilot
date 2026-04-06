@@ -37,6 +37,7 @@ class SectorRecord(BaseModel):
     up_count: int
     down_count: int
     leader: str
+    leader_code: str = ""
 
 
 class StockRecord(BaseModel):

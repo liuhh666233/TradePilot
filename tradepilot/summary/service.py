@@ -209,6 +209,7 @@ def _fetch_sectors(
                 "up_count": _safe_int(row.get("上涨家数")),
                 "down_count": _safe_int(row.get("下跌家数")),
                 "leader": _safe_str(row.get("领涨股票")),
+                "leader_code": _normalize_code(row.get("领涨股代码") or row.get("股票代码") or row.get("代码")),
             })
         records.sort(key=lambda x: x["change_pct"], reverse=not ascending)
         return [SectorRecord(**r) for r in records[:top_n]]
@@ -241,6 +242,7 @@ def _fetch_sectors(
                     "up_count": 0,
                     "down_count": 0,
                     "leader": "",
+                    "leader_code": "",
                 }
                 for _, row in df.iterrows()
             ]

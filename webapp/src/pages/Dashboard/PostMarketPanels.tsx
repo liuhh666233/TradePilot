@@ -1,4 +1,4 @@
-import { Card, Col, Descriptions, List, Row, Space, Table, Tag, Typography } from "antd";
+import { Card, Col, Descriptions, List, Row, Space, Table, Tabs, Tag, Typography } from "antd";
 
 const { Paragraph, Text } = Typography;
 
@@ -20,6 +20,16 @@ function renderTagList(values?: any[], emptyText = "暂无") {
     return <Text type="secondary">{emptyText}</Text>;
   }
   return values.map((value) => <Tag key={String(value)}>{String(value)}</Tag>);
+}
+
+function renderLeaderStock(name?: string, code?: string) {
+  if (!name && !code) {
+    return "-";
+  }
+  if (name && code) {
+    return `${name} (${code})`;
+  }
+  return name || code || "-";
 }
 
 function renderStringList(values?: any[], emptyText = "暂无") {
@@ -101,7 +111,8 @@ export default function PostMarketPanels({
             dataSource={indices}
             locale={{ emptyText: "暂无指数表现" }}
             columns={[
-              { title: "指数", dataIndex: "index_name", render: (value: string) => value || "-" },
+              { title: "指数", dataIndex: "index_name", render: (value: string, row: any) => value || row?.name || "-" },
+              { title: "代码", dataIndex: "index_code", render: (value: string, row: any) => value || row?.code || "-" },
               { title: "收盘", dataIndex: "close", render: (value: any) => value ?? "-" },
               { title: "涨跌幅", dataIndex: "pct_change", render: (value: any) => value ?? "-" },
               { title: "成交额", dataIndex: "amount", render: (value: any) => value ?? "-" },
@@ -138,7 +149,7 @@ export default function PostMarketPanels({
               { title: "板块", dataIndex: "sector_name", render: (value: string) => value || "-" },
               { title: "涨跌幅", dataIndex: "pct_change", render: (value: any) => value ?? "-" },
               { title: "净流入", dataIndex: "net_flow", render: (value: any) => value ?? "-" },
-              { title: "领涨股", dataIndex: "leader_stock", render: (value: string) => value || "-" },
+              { title: "领涨股", dataIndex: "leader_stock", render: (value: string, row: any) => renderLeaderStock(value, row?.leader_stock_code || row?.leader_code) },
             ]}
           />
           <Table
@@ -152,7 +163,7 @@ export default function PostMarketPanels({
               { title: "板块", dataIndex: "sector_name", render: (value: string) => value || "-" },
               { title: "涨跌幅", dataIndex: "pct_change", render: (value: any) => value ?? "-" },
               { title: "净流入", dataIndex: "net_flow", render: (value: any) => value ?? "-" },
-              { title: "领涨股", dataIndex: "leader_stock", render: (value: string) => value || "-" },
+              { title: "领涨股", dataIndex: "leader_stock", render: (value: string, row: any) => renderLeaderStock(value, row?.leader_stock_code || row?.leader_code) },
             ]}
           />
           <Table
@@ -167,70 +178,92 @@ export default function PostMarketPanels({
               { title: "分类", dataIndex: "role", render: (value: string) => value || "-" },
               { title: "5日趋势", dataIndex: "trend_5d", render: (value: string) => value || "-" },
               { title: "一致性", dataIndex: "consistency", render: (value: any) => value ?? "-" },
-              { title: "优选股", dataIndex: "leader_stock", render: (value: string) => value || "-" },
+              { title: "优选股", dataIndex: "leader_stock", render: (value: string, row: any) => renderLeaderStock(value, row?.leader_stock_code || row?.leader_code) },
               { title: "观察重点", dataIndex: "observation_note", render: (value: string) => value || "-" },
             ]}
           />
-          <Row gutter={[12, 12]}>
-            <Col xs={24} lg={12}>
-              <Card size="small" type="inner" title="行业板块 TOP / Bottom">
-                <Table
-                  size="small"
-                  pagination={false}
-                  rowKey={(item: any) => String(`industry-top-${item.name || Math.random()}`)}
-                  dataSource={industryTop}
-                  locale={{ emptyText: "暂无行业 TOP" }}
-                  columns={[
-                    { title: "行业", dataIndex: "name", render: (value: string) => value || "-" },
-                    { title: "涨跌幅", dataIndex: "change_pct", render: (value: any) => value ?? "-" },
-                    { title: "领涨股", dataIndex: "leader", render: (value: string) => value || "-" },
-                  ]}
-                />
-                <div style={{ height: 12 }} />
-                <Table
-                  size="small"
-                  pagination={false}
-                  rowKey={(item: any) => String(`industry-bottom-${item.name || Math.random()}`)}
-                  dataSource={industryBottom}
-                  locale={{ emptyText: "暂无行业 Bottom" }}
-                  columns={[
-                    { title: "行业", dataIndex: "name", render: (value: string) => value || "-" },
-                    { title: "涨跌幅", dataIndex: "change_pct", render: (value: any) => value ?? "-" },
-                    { title: "领涨股", dataIndex: "leader", render: (value: string) => value || "-" },
-                  ]}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} lg={12}>
-              <Card size="small" type="inner" title="概念板块 TOP / Bottom">
-                <Table
-                  size="small"
-                  pagination={false}
-                  rowKey={(item: any) => String(`concept-top-${item.name || Math.random()}`)}
-                  dataSource={conceptTop}
-                  locale={{ emptyText: "暂无概念 TOP" }}
-                  columns={[
-                    { title: "概念", dataIndex: "name", render: (value: string) => value || "-" },
-                    { title: "涨跌幅", dataIndex: "change_pct", render: (value: any) => value ?? "-" },
-                    { title: "领涨股", dataIndex: "leader", render: (value: string) => value || "-" },
-                  ]}
-                />
-                <div style={{ height: 12 }} />
-                <Table
-                  size="small"
-                  pagination={false}
-                  rowKey={(item: any) => String(`concept-bottom-${item.name || Math.random()}`)}
-                  dataSource={conceptBottom}
-                  locale={{ emptyText: "暂无概念 Bottom" }}
-                  columns={[
-                    { title: "概念", dataIndex: "name", render: (value: string) => value || "-" },
-                    { title: "涨跌幅", dataIndex: "change_pct", render: (value: any) => value ?? "-" },
-                    { title: "领涨股", dataIndex: "leader", render: (value: string) => value || "-" },
-                  ]}
-                />
-              </Card>
-            </Col>
-          </Row>
+          <Card size="small" type="inner" title="行业 / 概念榜单">
+            <Tabs
+              items={[
+                {
+                  key: "industry-rankings",
+                  label: `行业榜单 (${industryTop.length}/${industryBottom.length})`,
+                  children: (
+                    <Row gutter={[12, 12]}>
+                      <Col xs={24} lg={12}>
+                        <Table
+                          size="small"
+                          pagination={false}
+                          rowKey={(item: any) => String(`industry-top-${item.name || Math.random()}`)}
+                          dataSource={industryTop}
+                          locale={{ emptyText: "暂无行业 TOP" }}
+                          title={() => "行业 TOP"}
+                          columns={[
+                            { title: "行业", dataIndex: "name", render: (value: string) => value || "-" },
+                            { title: "涨跌幅", dataIndex: "change_pct", render: (value: any) => value ?? "-" },
+                            { title: "领涨股", dataIndex: "leader", render: (value: string, row: any) => renderLeaderStock(value, row?.leader_code || row?.leader_stock_code) },
+                          ]}
+                        />
+                      </Col>
+                      <Col xs={24} lg={12}>
+                        <Table
+                          size="small"
+                          pagination={false}
+                          rowKey={(item: any) => String(`industry-bottom-${item.name || Math.random()}`)}
+                          dataSource={industryBottom}
+                          locale={{ emptyText: "暂无行业 Bottom" }}
+                          title={() => "行业 Bottom"}
+                          columns={[
+                            { title: "行业", dataIndex: "name", render: (value: string) => value || "-" },
+                            { title: "涨跌幅", dataIndex: "change_pct", render: (value: any) => value ?? "-" },
+                            { title: "领涨股", dataIndex: "leader", render: (value: string, row: any) => renderLeaderStock(value, row?.leader_code || row?.leader_stock_code) },
+                          ]}
+                        />
+                      </Col>
+                    </Row>
+                  ),
+                },
+                {
+                  key: "concept-rankings",
+                  label: `概念榜单 (${conceptTop.length}/${conceptBottom.length})`,
+                  children: (
+                    <Row gutter={[12, 12]}>
+                      <Col xs={24} lg={12}>
+                        <Table
+                          size="small"
+                          pagination={false}
+                          rowKey={(item: any) => String(`concept-top-${item.name || Math.random()}`)}
+                          dataSource={conceptTop}
+                          locale={{ emptyText: "暂无概念 TOP" }}
+                          title={() => "概念 TOP"}
+                          columns={[
+                            { title: "概念", dataIndex: "name", render: (value: string) => value || "-" },
+                            { title: "涨跌幅", dataIndex: "change_pct", render: (value: any) => value ?? "-" },
+                            { title: "领涨股", dataIndex: "leader", render: (value: string, row: any) => renderLeaderStock(value, row?.leader_code || row?.leader_stock_code) },
+                          ]}
+                        />
+                      </Col>
+                      <Col xs={24} lg={12}>
+                        <Table
+                          size="small"
+                          pagination={false}
+                          rowKey={(item: any) => String(`concept-bottom-${item.name || Math.random()}`)}
+                          dataSource={conceptBottom}
+                          locale={{ emptyText: "暂无概念 Bottom" }}
+                          title={() => "概念 Bottom"}
+                          columns={[
+                            { title: "概念", dataIndex: "name", render: (value: string) => value || "-" },
+                            { title: "涨跌幅", dataIndex: "change_pct", render: (value: any) => value ?? "-" },
+                            { title: "领涨股", dataIndex: "leader", render: (value: string, row: any) => renderLeaderStock(value, row?.leader_code || row?.leader_stock_code) },
+                          ]}
+                        />
+                      </Col>
+                    </Row>
+                  ),
+                },
+              ]}
+            />
+          </Card>
           <Card size="small" type="inner" title="观察重点">
             {renderStringList(sectorPositioning?.observation_focus || [], "暂无观察重点")}
           </Card>
