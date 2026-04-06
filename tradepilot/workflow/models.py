@@ -49,13 +49,23 @@ class WorkflowSummary(BaseModel):
     requested_date: str | None = None
     resolved_date: str | None = None
     date_resolution: str = "exact"
-    watchlist: dict = Field(default_factory=dict)
+    market_overview: dict = Field(default_factory=dict)
+    sector_positioning: dict = Field(default_factory=dict)
+    position_health: dict = Field(default_factory=dict)
+    next_day_prep: dict = Field(default_factory=dict)
+    yesterday_recap: dict = Field(default_factory=dict)
+    overnight_news: dict = Field(default_factory=dict)
+    today_watchlist: dict = Field(default_factory=dict)
+    action_frame: dict = Field(default_factory=dict)
+    watch_context: dict = Field(default_factory=dict)
     alerts: list[dict] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
+    steps: list[WorkflowStepResult] = Field(default_factory=list)
+    watchlist: dict = Field(default_factory=dict)
     scan: dict = Field(default_factory=dict)
     news: dict = Field(default_factory=dict)
     scheduler: dict = Field(default_factory=dict)
     carry_over: dict = Field(default_factory=dict)
-    steps: list[WorkflowStepResult] = Field(default_factory=list)
 
 
 class WorkflowRunRecord(BaseModel):

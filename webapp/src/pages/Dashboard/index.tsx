@@ -95,10 +95,20 @@ export default function Dashboard() {
   const summary = currentWorkflow?.summary;
   const steps = summary?.steps || [];
   const alerts = summary?.alerts || [];
-  const watchSectors = summary?.watchlist?.watch_sectors || [];
-  const watchStocks = summary?.watchlist?.watch_stocks || [];
-  const newsItems = summary?.news?.items || [];
-  const scanAdvice = summary?.scan?.latest?.advice || [];
+  const watchContext = summary?.watch_context || {};
+  const watchSectors = watchContext?.watch_sectors || summary?.watchlist?.watch_sectors || [];
+  const watchStocks = watchContext?.watch_stocks || summary?.watchlist?.watch_stocks || [];
+  const overnightNews = summary?.overnight_news || {};
+  const yesterdayRecap = summary?.yesterday_recap || {};
+  const todayWatchlist = summary?.today_watchlist || {};
+  const actionFrame = summary?.action_frame || {};
+  const marketOverview = summary?.market_overview || {};
+  const sectorPositioning = summary?.sector_positioning || {};
+  const positionHealth = summary?.position_health || {};
+  const nextDayPrep = summary?.next_day_prep || {};
+  const newsItems = overnightNews?.highlights || summary?.news?.items || [];
+  const trackedItems = positionHealth?.tracked_items || [];
+  const watchSectorRecords = sectorPositioning?.watch_sectors || [];
 
   return (
     <div>
@@ -244,11 +254,19 @@ export default function Dashboard() {
               {activePhase === "pre_market" && (
                 <Row gutter={[12, 12]}>
                   <Col xs={24} lg={12}>
-                    <Card size="small" title="夜间新闻 / 公告">
+                    <Card size="small" title="昨日复盘摘要">
+                      <Space direction="vertical" style={{ width: "100%" }} size={8}>
+                        <Paragraph style={{ marginBottom: 0 }}>{yesterdayRecap?.summary || "暂无上一交易日盘后结论。"}</Paragraph>
+                        <Text type="secondary">市场状态：{yesterdayRecap?.regime || "unknown"}</Text>
+                      </Space>
+                    </Card>
+                  </Col>
+                  <Col xs={24} lg={12}>
+                    <Card size="small" title="隔夜信息">
                       <List
                         size="small"
                         dataSource={newsItems}
-                        locale={{ emptyText: "暂无夜间新闻" }}
+                        locale={{ emptyText: "暂无夜间信息" }}
                         renderItem={(item: any) => (
                           <List.Item>
                             <div>
@@ -263,16 +281,60 @@ export default function Dashboard() {
                       />
                     </Card>
                   </Col>
-                  <Col xs={24} lg={12}>
-                    <Card size="small" title="Carry-over 提示">
-                      {summary?.carry_over?.available ? (
-                        <Space direction="vertical" style={{ width: "100%" }} size={8}>
-                          <Text>来源日期：{summary.carry_over.workflow_date}</Text>
-                          <Paragraph style={{ marginBottom: 0 }}>{summary.carry_over.overview || "暂无盘后摘要"}</Paragraph>
-                        </Space>
-                      ) : (
-                        <Text type="secondary">暂无上一交易日盘后结果。</Text>
-                      )}
+                  <Col xs={24} lg={14}>
+                    <Card size="small" title="今日关注清单">
+                      <Space direction="vertical" style={{ width: "100%" }} size={10}>
+                        <div>
+                          <Text strong>市场大势观察</Text>
+                          <List
+                            size="small"
+                            dataSource={todayWatchlist?.market_checkpoints || []}
+                            locale={{ emptyText: "暂无观察项" }}
+                            renderItem={(item: string) => <List.Item>{item}</List.Item>}
+                          />
+                        </div>
+                        <div>
+                          <Text strong>重点板块</Text>
+                          <div style={{ marginTop: 6 }}>
+                            {(todayWatchlist?.focus_sectors || []).length > 0 ? (todayWatchlist.focus_sectors || []).map((item: any) => (
+                              <Tag key={item.sector_name}>{item.sector_name}</Tag>
+                            )) : <Text type="secondary">暂无</Text>}
+                          </div>
+                        </div>
+                        <div>
+                          <Text strong>持仓观察</Text>
+                          <div style={{ marginTop: 6 }}>
+                            {(todayWatchlist?.position_watch || []).length > 0 ? (todayWatchlist.position_watch || []).map((item: any) => (
+                              <div key={item.code} style={{ fontSize: 12, marginBottom: 4 }}>
+                                <Text strong>{item.name}</Text>
+                                <Text type="secondary"> · {item.today_observation}</Text>
+                              </div>
+                            )) : <Text type="secondary">暂无</Text>}
+                          </div>
+                        </div>
+                      </Space>
+                    </Card>
+                  </Col>
+                  <Col xs={24} lg={10}>
+                    <Card size="small" title="操作框架">
+                      <Space direction="vertical" style={{ width: "100%" }} size={8}>
+                        <Text>姿态：{actionFrame?.posture || "observe"}</Text>
+                        <div>
+                          <Text strong>关注方向</Text>
+                          <div style={{ marginTop: 6 }}>
+                            {(actionFrame?.focus_directions || []).length > 0 ? (actionFrame.focus_directions || []).map((item: string) => <Tag key={item}>{item}</Tag>) : <Text type="secondary">暂无</Text>}
+                          </div>
+                        </div>
+                        <div>
+                          <Text strong>风险提示</Text>
+                          <List
+                            size="small"
+                            dataSource={actionFrame?.risk_warnings || []}
+                            locale={{ emptyText: "暂无风险提示" }}
+                            renderItem={(item: string) => <List.Item>{item}</List.Item>}
+                          />
+                        </div>
+                      </Space>
                     </Card>
                   </Col>
                 </Row>
@@ -280,35 +342,90 @@ export default function Dashboard() {
 
               {activePhase === "post_market" && (
                 <Row gutter={[12, 12]}>
+                  <Col xs={24} lg={12}>
+                    <Card size="small" title="市场大势">
+                      <Space direction="vertical" style={{ width: "100%" }} size={8}>
+                        <Paragraph style={{ marginBottom: 0 }}>{marketOverview?.summary || "暂无市场大势结论"}</Paragraph>
+                        <Text type="secondary">市场状态：{marketOverview?.regime || "neutral"}</Text>
+                        <div>
+                          {(marketOverview?.key_takeaways || []).map((item: string) => (
+                            <div key={item} style={{ fontSize: 12, color: "#666" }}>{item}</div>
+                          ))}
+                        </div>
+                      </Space>
+                    </Card>
+                  </Col>
+                  <Col xs={24} lg={12}>
+                    <Card size="small" title="板块定位">
+                      <Space direction="vertical" style={{ width: "100%" }} size={8}>
+                        <div>
+                          <Text strong>当日主线</Text>
+                          <div style={{ marginTop: 6 }}>
+                            {(sectorPositioning?.market_leaders || []).length > 0 ? (sectorPositioning.market_leaders || []).map((item: any) => (
+                              <Tag key={item.sector_name}>{item.sector_name}</Tag>
+                            )) : <Text type="secondary">暂无</Text>}
+                          </div>
+                        </div>
+                        <div>
+                          <Text strong>固定观察池</Text>
+                          <div style={{ marginTop: 6 }}>
+                            {watchSectorRecords.length > 0 ? watchSectorRecords.map((item: any) => (
+                              <Tag key={item.sector_name}>{item.sector_name}</Tag>
+                            )) : <Text type="secondary">暂无</Text>}
+                          </div>
+                        </div>
+                      </Space>
+                    </Card>
+                  </Col>
                   <Col xs={24} lg={14}>
-                    <Card size="small" title="扫描建议摘要">
+                    <Card size="small" title="持仓健康度">
                       <Table
-                        dataSource={scanAdvice.slice(0, 10)}
-                        rowKey="stock_code"
+                        dataSource={trackedItems}
+                        rowKey={(item: any) => `${item.subject_type}-${item.code}`}
                         size="small"
                         pagination={false}
-                        locale={{ emptyText: "暂无扫描建议" }}
+                        locale={{ emptyText: "暂无持仓/观察对象" }}
                         columns={[
-                          { title: "股票", dataIndex: "stock_name", width: 90 },
-                          { title: "代码", dataIndex: "stock_code", width: 90 },
-                          { title: "操作", dataIndex: "action", width: 80 },
-                          { title: "紧迫", dataIndex: "urgency", width: 80 },
+                          { title: "对象", dataIndex: "name", width: 120 },
+                          { title: "类型", dataIndex: "subject_type", width: 100 },
                           {
-                            title: "评分",
-                            dataIndex: "score",
-                            width: 70,
-                            render: (value: number) => value?.toFixed?.(0) ?? "-",
+                            title: "状态",
+                            dataIndex: "state",
+                            width: 100,
+                            render: (value: string) => <Tag color={stepStatusColor(value === "breakdown" ? "failed" : value === "breakout" ? "success" : value === "watch" ? "partial" : "skipped")}>{value}</Tag>,
                           },
                           {
-                            title: "理由",
-                            dataIndex: "reasons",
-                            render: (value: string[] | string) => Array.isArray(value) ? value.slice(0, 2).join("；") : (value || "-"),
+                            title: "观察要点",
+                            dataIndex: "observation_note",
+                            render: (value: string) => value || "-",
                           },
                         ]}
                       />
                     </Card>
                   </Col>
                   <Col xs={24} lg={10}>
+                    <Card size="small" title="明日准备">
+                      <Space direction="vertical" style={{ width: "100%" }} size={8}>
+                        <Text>市场偏向：{nextDayPrep?.market_bias || "observe"}</Text>
+                        <div>
+                          <Text strong>重点方向</Text>
+                          <div style={{ marginTop: 6 }}>
+                            {(nextDayPrep?.focus_sectors || []).length > 0 ? (nextDayPrep.focus_sectors || []).map((item: string) => <Tag key={item}>{item}</Tag>) : <Text type="secondary">暂无</Text>}
+                          </div>
+                        </div>
+                        <div>
+                          <Text strong>风险提示</Text>
+                          <List
+                            size="small"
+                            dataSource={nextDayPrep?.risk_notes || []}
+                            locale={{ emptyText: "暂无风险提示" }}
+                            renderItem={(item: string) => <List.Item>{item}</List.Item>}
+                          />
+                        </div>
+                      </Space>
+                    </Card>
+                  </Col>
+                  <Col xs={24}>
                     <Card size="small" title="最近预警">
                       <List
                         size="small"
