@@ -94,7 +94,7 @@ def _init_tables(conn: duckdb.DuckDBPyConnection):
         );
         CREATE TABLE IF NOT EXISTS news_items (
             source VARCHAR, source_item_id VARCHAR, title VARCHAR, content VARCHAR,
-            category VARCHAR, published_at TIMESTAMP, collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            category VARCHAR, published_at TIMESTAMP, url VARCHAR, collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             content_hash VARCHAR, processing_status VARCHAR DEFAULT 'pending',
             processing_error VARCHAR, processed_at TIMESTAMP,
             PRIMARY KEY (source, source_item_id)
@@ -207,6 +207,11 @@ def _init_tables(conn: duckdb.DuckDBPyConnection):
             buy_date DATE, buy_price DOUBLE, quantity INTEGER,
             status VARCHAR DEFAULT 'open'
         );
+    """)
+    news_columns = {row[1] for row in conn.execute("PRAGMA table_info('news_items')").fetchall()}
+    if "url" not in news_columns:
+        conn.execute("ALTER TABLE news_items ADD COLUMN url VARCHAR")
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS trades (
             id INTEGER PRIMARY KEY,
             date DATE, stock_code VARCHAR, stock_name VARCHAR,

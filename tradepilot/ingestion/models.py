@@ -85,6 +85,7 @@ class NewsItemRecord(BaseModel):
     content: str
     category: str | None = None
     published_at: datetime | None = None
+    url: str | None = None
 
 
 class VideoContentRecord(BaseModel):

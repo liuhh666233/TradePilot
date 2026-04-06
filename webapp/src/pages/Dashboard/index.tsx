@@ -14,6 +14,7 @@ import {
   Tag,
   Typography,
 } from "antd";
+import OvernightNewsTabs, { newsCategoryLabel, newsDirectionColor, newsDirectionLabel } from "./OvernightNewsTabs";
 import { HistoryOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
   getLatestWorkflow,
@@ -59,28 +60,6 @@ function stepStatusColor(status?: string) {
       partial: "orange",
     } as Record<string, string>
   )[status || ""] || "default";
-}
-
-function newsDirectionColor(direction?: string) {
-  return (
-    {
-      positive: "green",
-      mixed: "orange",
-      negative: "red",
-      neutral: "default",
-    } as Record<string, string>
-  )[direction || ""] || "default";
-}
-
-function newsDirectionLabel(direction?: string) {
-  return (
-    {
-      positive: "偏利多",
-      mixed: "待观察",
-      negative: "偏风险",
-      neutral: "中性",
-    } as Record<string, string>
-  )[direction || ""] || "待观察";
 }
 
 function getOverviewText(context: WorkflowContextPayload | null, workflow?: WorkflowRunResponse | null) {
@@ -347,7 +326,7 @@ export default function Dashboard() {
   const watchContext = context?.watch_context || summary?.watch_context || {};
   const watchSectors = watchContext?.watch_sectors || [];
   const watchStocks = watchContext?.watch_stocks || [];
-  const overnightNews = context?.overnight_news || {};
+  const overnightNews = context?.overnight_news || summary?.overnight_news || {};
   const yesterdayRecap = context?.yesterday_recap || {};
   const todayWatchlist = context?.today_watchlist || {};
   const actionFrame = context?.action_frame || {};
@@ -356,6 +335,7 @@ export default function Dashboard() {
   const positionHealth = context?.position_health || {};
   const nextDayPrep = context?.next_day_prep || {};
   const newsItems = overnightNews?.highlights || [];
+  const categorizedNews = Object.entries(overnightNews?.categorized || {}).filter(([, items]) => Array.isArray(items) && items.length > 0);
   const newsSectorMappings = overnightNews?.sector_mappings || [];
   const newsFocusSectors = todayWatchlist?.news_focus_sectors || actionFrame?.news_focus_sectors || [];
   const positiveNewsSectors = actionFrame?.positive_news_sectors || [];
@@ -401,62 +381,11 @@ export default function Dashboard() {
           key: "news",
           label: "隔夜信息",
           children: (
-            <Row gutter={[12, 12]}>
-              <Col xs={24} lg={14}>
-                <Card size="small" title="新闻列表">
-                  <List
-                    size="small"
-                    dataSource={newsItems}
-                    locale={{ emptyText: "暂无夜间信息" }}
-                    renderItem={(item: any) => (
-                      <List.Item>
-                        <div>
-                          <div style={{ fontWeight: 500 }}>{item.title || "未命名新闻"}</div>
-                          <div style={{ fontSize: 12, color: "#666" }}>
-                            {item.source || "unknown"}
-                            {item.published_at ? ` · ${String(item.published_at).slice(0, 16).replace("T", " ")}` : ""}
-                          </div>
-                        </div>
-                      </List.Item>
-                    )}
-                  />
-                </Card>
-              </Col>
-              <Col xs={24} lg={10}>
-                <Card size="small" title="相关观察板块">
-                  <List
-                    size="small"
-                    dataSource={newsSectorMappings}
-                    locale={{ emptyText: "暂无板块映射" }}
-                    renderItem={(item: any) => (
-                      <List.Item>
-                        <div style={{ width: "100%" }}>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                            <Text strong>{item.sector_name}</Text>
-                            {item.role ? <Tag color="blue">{item.role}</Tag> : null}
-                            {item.direction ? <Tag color={newsDirectionColor(item.direction)}>{newsDirectionLabel(item.direction)}</Tag> : null}
-                            {item.matched_count ? <Tag>{item.matched_count} 条</Tag> : null}
-                          </div>
-                          {item.thesis ? <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>{item.thesis}</div> : null}
-                          {(item.related_news || []).length > 0 ? (
-                            <div style={{ marginTop: 6 }}>
-                              {(item.related_news || []).map((news: any) => (
-                                <div key={`${item.sector_name}-${news.title}`} style={{ fontSize: 12, marginBottom: 4 }}>
-                                  <Text>{news.title}</Text>
-                                  {(news.matched_aliases || []).length > 0 ? (
-                                    <span style={{ color: "#999" }}> · 匹配 {news.matched_aliases.join("/")}</span>
-                                  ) : null}
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      </List.Item>
-                    )}
-                  />
-                </Card>
-              </Col>
-            </Row>
+            <OvernightNewsTabs
+              highlights={newsItems}
+              categorizedNews={categorizedNews}
+              sectorMappings={newsSectorMappings}
+            />
           ),
         },
         {

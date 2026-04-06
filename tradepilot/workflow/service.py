@@ -673,14 +673,30 @@ class DailyWorkflowService:
         conn = get_conn()
         rows = conn.execute(
             """
-            SELECT source, source_item_id, title, content, category, published_at, collected_at
+            SELECT source, source_item_id, title, content, category, published_at, url, collected_at
             FROM news_items
             ORDER BY COALESCE(published_at, collected_at) DESC
             LIMIT ?
             """,
             [limit],
-        ).fetchdf()
-        return rows.to_dict(orient="records")
+        ).fetchall()
+        records: list[dict] = []
+        for row in rows:
+            published_at = row[5]
+            collected_at = row[7]
+            records.append(
+                {
+                    "source": row[0],
+                    "source_item_id": row[1],
+                    "title": row[2],
+                    "content": row[3],
+                    "category": row[4],
+                    "published_at": published_at.isoformat() if hasattr(published_at, "isoformat") else None,
+                    "url": row[6],
+                    "collected_at": collected_at.isoformat() if hasattr(collected_at, "isoformat") else None,
+                }
+            )
+        return records
 
     def _resolve_status(self, steps: list[WorkflowStepResult]) -> WorkflowStatus:
         statuses = {step.status for step in steps}
@@ -750,14 +766,45 @@ class DailyWorkflowService:
         }
 
     def _build_overnight_news(self, news_status: str, news_items: list[dict], watch_context: dict) -> dict:
-        highlights = news_items[:5]
-        categorized = {
-            "macro": [item for item in news_items if item.get("category") == "macro"],
-            "industry": [item for item in news_items if item.get("category") == "industry"],
-            "company": [item for item in news_items if item.get("category") == "company"],
-            "geopolitics": [item for item in news_items if item.get("category") == "geopolitics"],
-            "overseas": [item for item in news_items if item.get("category") == "overseas"],
+        categorized: dict[str, list[dict]] = {
+            "macro": [],
+            "industry": [],
+            "company": [],
+            "geopolitics": [],
+            "overseas": [],
+            "technology": [],
+            "general": [],
         }
+        for item in news_items:
+            category = self._normalize_news_category(item)
+            item["category"] = category
+            categorized.setdefault(category, []).append(item)
+        source_priority = {
+            "cls_telegraph": 0,
+            "eastmoney_kuaixun": 1,
+            "wallstreetcn": 2,
+            "36kr": 3,
+            "hacker_news": 4,
+            "github_trending": 5,
+        }
+        category_priority = {
+            "macro": 0,
+            "company": 1,
+            "industry": 2,
+            "geopolitics": 3,
+            "overseas": 4,
+            "general": 5,
+            "technology": 6,
+        }
+        highlight_candidates = [item for item in news_items if item.get("category") != "technology"]
+        highlight_candidates.sort(
+            key=lambda item: (
+                source_priority.get(str(item.get("source") or ""), 99),
+                category_priority.get(str(item.get("category") or "general"), 99),
+                str(item.get("published_at") or ""),
+            )
+        )
+        highlights = highlight_candidates[:5]
         sector_mappings = self._build_news_sector_mappings(news_items, watch_context)
         summary = f"夜间信息同步状态：{news_status}；共整理 {len(news_items)} 条信息。"
         if sector_mappings:
@@ -769,6 +816,42 @@ class DailyWorkflowService:
             "categorized": categorized,
             "sector_mappings": sector_mappings,
         }
+
+    def _normalize_news_category(self, item: dict) -> str:
+        """Normalize one news item into the standard overnight news category set."""
+        raw_category = str(item.get("category") or "").strip().lower()
+        if raw_category in {"macro", "industry", "company", "geopolitics", "overseas", "technology", "general"}:
+            return raw_category
+        title = str(item.get("title") or "")
+        content = str(item.get("content") or "")
+        text = f"{title} {content}".lower()
+        technology_keywords = [
+            "ai",
+            "人工智能",
+            "大模型",
+            "模型",
+            "机器人",
+            "算力",
+            "芯片",
+            "半导体",
+            "光刻",
+            "cpo",
+            "通信",
+            "软件",
+            "云计算",
+            "数据中心",
+            "自动驾驶",
+            "低空经济",
+            "卫星",
+            "量子",
+            "科技",
+            "技术",
+        ]
+        if any(keyword in text for keyword in technology_keywords):
+            return "technology"
+        if raw_category in {"other", "mixed", "misc", "unknown", ""}:
+            return "general"
+        return "general"
 
     def _build_today_watchlist(self, watch_context: dict, alerts: list[dict], carry_over: dict, overnight_news: dict | None = None) -> dict:
         watch_sectors = watch_context.get("watch_sectors", [])
