@@ -64,14 +64,16 @@ tradepilot/          # Python 后端
   main.py            # FastAPI 入口
   config.py          # 配置
   db.py              # DuckDB 连接 + 表初始化
-  data/              # 数据采集层 (Mock/AKShare)
-  analysis/          # 分析引擎 (技术/估值/资金/轮动/信号/风控)
+  data/              # 数据提供层 (默认 Tushare)
+  ingestion/         # 市场/新闻/B站同步编排
+  collector/         # 新闻与内容采集器
+  workflow/          # pre/post workflow、context/insight contract
   api/               # REST API 路由
   portfolio/         # 组合管理
   scheduler/         # 定时任务
 
 webapp/              # React 前端
-  src/pages/         # 5 个页面 (Dashboard/StockAnalysis/SectorMap/Portfolio/TradePlan)
+  src/pages/         # 以 Daily Workflow 和 Portfolio 为主
   src/services/      # API 调用封装
   src/components/    # 通用组件
 

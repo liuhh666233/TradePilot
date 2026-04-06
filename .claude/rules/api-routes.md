@@ -5,18 +5,17 @@ paths:
 
 # API 路由模块
 
-FastAPI REST API 层，前端通过 `/api/*` 访问。
+FastAPI REST API 层，当前前端主路径主要通过 `/api/workflow`、`/api/summary`、`/api/scheduler` 与 `/api/portfolio` 访问。
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `tradepilot/api/market.py` | 行情数据接口 (股票列表/K线/ETF/北向/两融/估值/行业) |
+| `tradepilot/api/workflow.py` | workflow latest/history/status/context/insight read-write |
+| `tradepilot/api/summary.py` | richer watchlist + trading-status |
 | `tradepilot/api/portfolio.py` | 持仓 CRUD + 交易记录 |
-| `tradepilot/api/analysis.py` | 技术分析/估值/行业轮动 (接入分析引擎) |
-| `tradepilot/api/signal.py` | 信号列表/综合评分/市场情绪 |
-| `tradepilot/api/trade_plan.py` | 交易计划 (评估/CRUD/状态流转/监控止盈止损) |
 | `tradepilot/api/collector.py` | 数据接入手动 sync (market/news/bilibili) |
+| `tradepilot/api/briefing.py` | legacy alerts / compatibility |
 
 ## API 路径
 
@@ -51,3 +50,12 @@ FastAPI REST API 层，前端通过 `/api/*` 访问。
 | `/api/collector/bilibili/sync` | POST | 手动同步 B 站视频 |
 | `/api/collector/runs` | GET | 同步运行历史 |
 | `/api/collector/status` | GET | 接入状态总览 |
+| `/api/summary/watchlist` | GET/PUT | richer watch config 读写（兼容旧平面结构） |
+| `/api/workflow/latest` | GET | latest workflow run |
+| `/api/workflow/history` | GET | workflow history |
+| `/api/workflow/status` | GET | pre/post latest status |
+| `/api/workflow/context/latest` | GET | latest structured context |
+| `/api/workflow/insight/latest` | GET | latest insight + freshness state |
+| `/api/workflow/insight` | PUT | The-One insight write-back |
+| `/api/workflow/pre/run` | POST | 手动运行盘前 workflow |
+| `/api/workflow/post/run` | POST | 手动运行盘后 workflow |

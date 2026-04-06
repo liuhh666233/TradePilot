@@ -815,53 +815,33 @@ The-One 的 `config/watch.json` 比 TradePilot 当前版本更完整。长期应
 - [x] 明确 Web 优先显示 insight、缺失时回退显示 context
 
 ### 进行中 / 未完成
-- [ ] richer watch config
-- [ ] market reference config
+- [x] richer watch config（已完成最小可用版，兼容旧平面 watchlist）
+- [x] market reference config（已完成最小收口版，workflow 主链 hardcode 已集中）
 - [ ] trading-day unified reference layer
 - [ ] price/adjustment policy
-- [ ] real overnight news pipeline
-- [ ] post -> pre reference block refinement
-- [ ] The-One insight JSON schema
-- [ ] insight write-back storage/API
+- [x] real overnight news pipeline（已完成最小可用版：财联社 / 东方财富采集 + 分类 + sector mappings）
+- [x] post -> pre reference block refinement（已完成基础版：overnight news -> sector mappings -> today_watchlist/action_frame）
+- [x] The-One insight JSON schema（已完成 v1，含标准 section key）
+- [x] insight write-back storage/API
 - [ ] workflow regression tests
 
 ## Remaining Work
 
-### P0 — 必做（当前重构仍未完成的关键项）
+### P0 — 当前阶段后的剩余关键项
 
-1. **与 The-One daily-workflow 的 watch/config 运行范式仍有明显差距**
-   - 当前仍更接近平面 watchlist，而不是 `positions + watchlist` 双分组语义配置。
-   - 缺少 sector / stock 元信息层，无法稳定支撑观察框架、新闻映射和 briefing narrative。
+1. **TradePilot ↔ The-One 的运行级联调尚未完成**
+   - context / insight contract、write-back API、Dashboard 展示都已具备。
+   - 当前主要缺口是 The-One 侧正式接入、回写时机、失败与 stale 处理流程。
 
-2. **TradePilot ↔ The-One 的 context / insight contract 尚未正式落库实现**
-   - 交互方式已经明确，但代码中还没有正式的：
-     - context schema
-     - insight schema
-     - insight write-back API
-     - insight result table
-     - insight state 管理
+2. **briefing/context 数据目前仍主要以 `workflow_runs.summary_json` 持久化，粒度偏粗**
+   - 当前已足够支撑本阶段功能，但仍不利于 reference block 复用、intraday 复用与单块调试。
+   - 后续再评估 `workflow_contexts` / `workflow_reference_snapshots` 是否值得拆出。
 
-3. **真实新闻链路仍未完成**
-   - `tradepilot/collector/news.py` 中 `NewsCollector.collect()` 仍为 stub。
-   - `sync_news success` 不能代表有新闻，`overnight_news` 目前可能长期为空。
-   - 必须补齐：
-     - 真实新闻采集
-     - 时间窗口过滤
-     - 去重 / 排序 / 分类
-     - `news -> watched sector mapping`
+3. **交易日数据尚未真正成为 workflow 的统一 reference layer**
+   - 仍需统一 fallback、新闻窗口与 scheduler 逻辑。
 
-4. **briefing/context 数据目前主要仍以 `workflow_runs.summary_json` 持久化，粒度偏粗**
-   - 当前虽已落库，但还不利于 reference block 复用、intraday 复用与单块调试。
-   - 需要明确哪些继续留在 `summary_json`，哪些拆成 snapshot/reference/review 表。
-
-5. **代码中仍存在较多 hardcode 的指数代码 / ETF 代码**
-   - 需要引入统一 market reference config，避免 magic codes 散落在 workflow / summary / scanner / legacy API 中。
-
-6. **交易日数据尚未真正成为 workflow 的统一 reference layer**
-   - 需要统一 fallback、新闻窗口与 scheduler 逻辑。
-
-7. **复权数据口径尚未明确**
-   - 需要明确 workflow 的统一价格基准，避免不同模块使用不同价格口径。
+4. **复权数据口径尚未明确**
+   - 仍需定义 workflow 的统一价格基准，避免不同模块使用不同价格口径。
 
 ### P1 — 应做（影响交易帮助与系统质量）
 
@@ -909,29 +889,26 @@ The-One 的 `config/watch.json` 比 TradePilot 当前版本更完整。长期应
 
 ## Recommended Next Step
 
-在进入下一轮代码改造前，最推荐优先落地的是：
+基于当前实现进度，本阶段基础功能已经足够，推荐把下一步明确为：
 
-### Step 1 — 定义并实现配置层
-- richer watch config
-- watch config loader / normalizer
-- market reference config
-- 去除 workflow/service 等处的 hardcode 指数 / ETF 代码
+### Step 1 — 和 The-One 完成最小联调闭环
+- The-One 拉取 `GET /api/workflow/context/latest`
+- The-One 按当前标准 insight schema 生成结果
+- The-One 回写 `PUT /api/workflow/insight`
+- 验证 fresh / stale / failed 三种状态的 Dashboard 行为
 
-### Step 2 — 定义 context / insight contract
-- TradePilot -> The-One context schema
-- The-One -> TradePilot insight schema
-- insight state model
-- insight write-back API
-- insight persistence table
+### Step 2 — 只补必要的护栏，而不是继续扩张主路径
+- workflow regression tests
+- summary/watchlist 兼容性测试
+- news mapping 与 direction 规则测试
 
-### Step 3 — 补齐真实新闻与 reference block
-- 真实新闻采集
-- 时间窗口过滤
-- 分类/映射
-- post -> pre reference block refinement
+### Step 3 — 将更大范围的 schema / storage / policy 工作后置
+- `workflow_contexts` / reference snapshot 拆分
+- trading-day unified reference layer
+- price policy
+- intraday watch
 
-### Step 4 — 再增强 next_day_prep / action_frame / Web 展示
-让最终 narrative 真正建立在前面稳定的输入层之上。
+当前阶段不再建议继续扩张业务面；优先把现有能力稳定住，并完成 The-One 真正接入。
 
 ## Open Questions
 

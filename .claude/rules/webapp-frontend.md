@@ -8,26 +8,26 @@ paths:
 
 # TradePilot Frontend
 
-React + TypeScript + Vite 前端，使用 Ant Design 组件库 + @ant-design/charts 图表。
+React + TypeScript + Vite 前端，当前已收口为 workflow-first shell：Dashboard 以 The-One insight-first / TradePilot context-fallback 为主，Portfolio 保留为持仓输入界面。
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `webapp/src/App.tsx` | 根组件，侧边栏导航 + 5 页面路由 |
+| `webapp/src/App.tsx` | 路由入口，已基本收口到 Dashboard + Portfolio |
 | `webapp/src/main.tsx` | React 入口 |
-| `webapp/src/services/api.ts` | API 调用封装 (market/analysis/signal/portfolio/trade_plan) |
+| `webapp/src/pages/Dashboard/index.tsx` | insight-first / context-fallback 主页面 |
+| `webapp/src/services/api.ts` | workflow / summary / scheduler / portfolio API typed contract |
 | `webapp/vite.config.ts` | Vite 配置 + API 代理 |
 
 ## 页面
 
 | 路由 | 页面 | 功能 |
 |------|------|------|
-| `/` | Dashboard | 仪表盘: 大盘K线 + 资金面仪表盘 + 行业板块 + 持仓总览 |
-| `/analysis` | StockAnalysis | 个股分析: K线+MACD图 + 估值(PE/PB/值博率) + 信号列表 |
-| `/sectors` | SectorMap | 行业地图: 涨跌排名(5/20/60日) + 高位预警/低位机会 + 高切低建议 |
-| `/portfolio` | Portfolio | 持仓管理: 持仓CRUD + 交易记录 |
-| `/plans` | TradePlan | 交易计划: 评估→创建→监控止盈止损 |
+| `/` | Dashboard | Daily Workflow 主页面：The-One insight、TradePilot context、workflow/scheduler 状态与历史 |
+| `/portfolio` | Portfolio | 持仓管理：持仓 CRUD + 交易记录，继续作为 workflow position 输入源 |
+
+其余 legacy 页面已不是当前主产品路径，不应作为新功能实现的默认落点。
 
 ## Tech Stack
 
