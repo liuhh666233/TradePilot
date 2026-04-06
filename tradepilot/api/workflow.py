@@ -23,7 +23,7 @@ def get_latest_workflow(
     phase: WorkflowPhase = Query(..., description="Workflow phase to fetch"),
 ) -> WorkflowRunResponse | None:
     """Return the latest workflow snapshot for one phase."""
-    run = _service.get_latest_run(phase)
+    run = _service.get_latest_display_run(phase)
     if run is None:
         return None
     return WorkflowRunResponse(run=run)
@@ -66,7 +66,7 @@ def get_latest_workflow_context(
     phase: WorkflowPhase = Query(..., description="Workflow phase to fetch context for"),
 ) -> WorkflowContextPayload | None:
     """Return the latest structured context for one workflow phase."""
-    return _service.get_latest_context(phase)
+    return _service.get_latest_context(phase, for_display=True)
 
 
 @router.get("/insight/latest", response_model=WorkflowInsightResponse)
@@ -75,7 +75,12 @@ def get_latest_workflow_insight(
     producer: str = Query("the_one", description="Insight producer identifier"),
 ) -> WorkflowInsightResponse:
     """Return the latest insight state for one workflow phase."""
-    return _service.get_latest_insight(phase=phase, producer=producer)
+    response = _service.get_latest_insight(phase=phase, producer=producer)
+    if phase == WorkflowPhase.POST_MARKET:
+        display_run = _service.get_latest_display_run(phase)
+        if display_run is not None:
+            response.latest_run_id = display_run.id
+    return response
 
 
 @router.put("/insight", response_model=WorkflowInsightResponse)

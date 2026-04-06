@@ -373,6 +373,30 @@ class DailyWorkflowService:
             return None
         return self._row_to_run(row)
 
+    def get_latest_display_run(self, phase: WorkflowPhase) -> WorkflowRunRecord | None:
+        """Return the latest run suitable for dashboard display."""
+        latest_run = self.get_latest_run(phase)
+        if latest_run is None:
+            return None
+        if phase != WorkflowPhase.POST_MARKET:
+            return latest_run
+        if latest_run.status != WorkflowStatus.SKIPPED:
+            return latest_run
+        conn = get_conn()
+        row = conn.execute(
+            """
+            SELECT id, workflow_date, phase, triggered_by, status, started_at, finished_at, summary_json, error_message
+            FROM workflow_runs
+            WHERE phase = ? AND status != ?
+            ORDER BY workflow_date DESC, started_at DESC, id DESC
+            LIMIT 1
+            """,
+            [phase.value, WorkflowStatus.SKIPPED.value],
+        ).fetchone()
+        if row is None:
+            return latest_run
+        return self._row_to_run(row)
+
     def list_history(self, limit: int = 20) -> list[WorkflowHistoryItem]:
         """Return recent workflow history rows."""
         conn = get_conn()
@@ -406,9 +430,9 @@ class DailyWorkflowService:
             "post_market": self._status_summary(self.get_latest_run(WorkflowPhase.POST_MARKET)),
         }
 
-    def get_latest_context(self, phase: WorkflowPhase) -> WorkflowContextPayload | None:
+    def get_latest_context(self, phase: WorkflowPhase, for_display: bool = False) -> WorkflowContextPayload | None:
         """Return the latest structured context for one phase."""
-        run = self.get_latest_run(phase)
+        run = self.get_latest_display_run(phase) if for_display else self.get_latest_run(phase)
         if run is None:
             return None
         return self.build_context_payload(run)
@@ -422,6 +446,8 @@ class DailyWorkflowService:
                 "sector_positioning": summary.sector_positioning,
                 "position_health": summary.position_health,
                 "next_day_prep": summary.next_day_prep,
+                "cross_day_review": summary.cross_day_review,
+                "research_archive": summary.research_archive,
                 "watch_context": summary.watch_context,
                 "alerts": summary.alerts,
             }

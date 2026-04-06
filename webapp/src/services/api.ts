@@ -51,6 +51,8 @@ export interface WorkflowRunSummary {
   news?: Record<string, any>;
   scheduler?: Record<string, any>;
   carry_over?: Record<string, any>;
+  cross_day_review?: Record<string, any>;
+  research_archive?: Record<string, any>;
 }
 
 export interface WorkflowRun {

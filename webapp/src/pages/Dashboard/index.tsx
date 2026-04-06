@@ -14,7 +14,8 @@ import {
   Tag,
   Typography,
 } from "antd";
-import OvernightNewsTabs, { newsCategoryLabel, newsDirectionColor, newsDirectionLabel } from "./OvernightNewsTabs";
+import OvernightNewsTabs, { newsDirectionColor, newsDirectionLabel } from "./OvernightNewsTabs";
+import PostMarketPanels from "./PostMarketPanels";
 import { HistoryOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
   getLatestWorkflow,
@@ -334,6 +335,8 @@ export default function Dashboard() {
   const sectorPositioning = context?.sector_positioning || {};
   const positionHealth = context?.position_health || {};
   const nextDayPrep = context?.next_day_prep || {};
+  const crossDayReview = context?.cross_day_review || summary?.cross_day_review || {};
+  const researchArchive = context?.research_archive || summary?.research_archive || {};
   const newsItems = overnightNews?.highlights || [];
   const categorizedNews = Object.entries(overnightNews?.categorized || {}).filter(([, items]) => Array.isArray(items) && items.length > 0);
   const newsSectorMappings = overnightNews?.sector_mappings || [];
@@ -341,7 +344,6 @@ export default function Dashboard() {
   const positiveNewsSectors = actionFrame?.positive_news_sectors || [];
   const riskNewsSectors = actionFrame?.risk_news_sectors || [];
   const trackedItems = positionHealth?.tracked_items || [];
-  const watchSectorRecords = sectorPositioning?.watch_sectors || [];
 
   const insightPayload = currentInsight?.insight?.insight || {};
   const insightSections: WorkflowInsightSection[] = Array.isArray(insightPayload?.sections) ? insightPayload.sections : [];
@@ -501,92 +503,20 @@ export default function Dashboard() {
       ]
     : [
         {
-          key: "market-overview",
-          label: "市场大势",
+          key: "post-market-panels",
+          label: "盘后复盘",
           children: (
-            <Space size={8} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "stretch" }}>
-              <Paragraph style={{ marginBottom: 0 }}>{marketOverview?.summary || "暂无市场大势结论"}</Paragraph>
-              <Text type="secondary">市场状态：{marketOverview?.regime || "neutral"}</Text>
-              {(marketOverview?.key_takeaways || []).length > 0 ? (
-                <List size="small" dataSource={marketOverview.key_takeaways || []} renderItem={(item: string) => <List.Item>{item}</List.Item>} />
-              ) : null}
-            </Space>
-          ),
-        },
-        {
-          key: "sector-positioning",
-          label: "板块定位",
-          children: (
-            <Descriptions
-              column={1}
-              size="small"
-              items={[
-                {
-                  key: "leaders",
-                  label: "当日主线",
-                  children: (sectorPositioning?.market_leaders || []).length > 0
-                    ? (sectorPositioning.market_leaders || []).map((item: any) => <Tag key={item.sector_name}>{item.sector_name}</Tag>)
-                    : "暂无",
-                },
-                {
-                  key: "watch-sectors",
-                  label: "固定观察池",
-                  children: watchSectorRecords.length > 0
-                    ? watchSectorRecords.map((item: any) => <Tag key={item.sector_name}>{item.sector_name}</Tag>)
-                    : "暂无",
-                },
-              ]}
-            />
-          ),
-        },
-        {
-          key: "position-health",
-          label: "持仓健康度",
-          children: (
-            <Table
-              dataSource={trackedItems}
-              rowKey={(item: any) => `${item.subject_type}-${item.code}`}
-              size="small"
-              pagination={false}
-              locale={{ emptyText: "暂无持仓/观察对象" }}
-              columns={[
-                { title: "对象", dataIndex: "name", width: 120 },
-                { title: "类型", dataIndex: "subject_type", width: 100 },
-                {
-                  title: "状态",
-                  dataIndex: "state",
-                  width: 100,
-                  render: (value: string) => <Tag color={stepStatusColor(value === "breakdown" ? "failed" : value === "breakout" ? "success" : value === "watch" ? "partial" : "skipped")}>{value}</Tag>,
-                },
-                { title: "观察要点", dataIndex: "observation_note", render: (value: string) => value || "-" },
-              ]}
-            />
-          ),
-        },
-        {
-          key: "next-day-prep",
-          label: "明日准备",
-          children: (
-            <Descriptions
-              column={1}
-              size="small"
-              items={[
-                { key: "bias", label: "市场偏向", children: nextDayPrep?.market_bias || "observe" },
-                {
-                  key: "focus-sectors",
-                  label: "重点方向",
-                  children: (nextDayPrep?.focus_sectors || []).length > 0
-                    ? (nextDayPrep.focus_sectors || []).map((item: string) => <Tag key={item}>{item}</Tag>)
-                    : "暂无",
-                },
-                {
-                  key: "risk-notes",
-                  label: "风险提示",
-                  children: (nextDayPrep?.risk_notes || []).length > 0
-                    ? <List size="small" dataSource={nextDayPrep.risk_notes || []} renderItem={(item: string) => <List.Item>{item}</List.Item>} />
-                    : "暂无",
-                },
-              ]}
+            <PostMarketPanels
+              workflowDate={currentWorkflow?.run.workflow_date}
+              requestedDate={summary?.requested_date}
+              resolvedDate={summary?.resolved_date}
+              dateResolution={summary?.date_resolution}
+              marketOverview={marketOverview}
+              sectorPositioning={sectorPositioning}
+              positionHealth={positionHealth}
+              nextDayPrep={nextDayPrep}
+              crossDayReview={crossDayReview}
+              researchArchive={researchArchive}
             />
           ),
         },
