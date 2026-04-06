@@ -17,7 +17,13 @@ from tradepilot.ingestion.service import IngestionService
 from tradepilot.scanner.daily import DailyScanner, normalize_scan_date
 from tradepilot.summary.models import WatchlistConfig
 from tradepilot.workflow.models import (
+    InsightStatus,
+    WorkflowContextPayload,
     WorkflowHistoryItem,
+    WorkflowInsightPayload,
+    WorkflowInsightRecord,
+    WorkflowInsightResponse,
+    WorkflowInsightUpsertRequest,
     WorkflowPhase,
     WorkflowRunRecord,
     WorkflowStatus,
@@ -357,6 +363,148 @@ class DailyWorkflowService:
             "pre_market": self._status_summary(self.get_latest_run(WorkflowPhase.PRE_MARKET)),
             "post_market": self._status_summary(self.get_latest_run(WorkflowPhase.POST_MARKET)),
         }
+
+    def get_latest_context(self, phase: WorkflowPhase) -> WorkflowContextPayload | None:
+        """Return the latest structured context for one phase."""
+        run = self.get_latest_run(phase)
+        if run is None:
+            return None
+        return self.build_context_payload(run)
+
+    def build_context_payload(self, run: WorkflowRunRecord) -> WorkflowContextPayload:
+        """Convert one workflow run into the stage-1 context contract."""
+        summary = run.summary
+        if run.phase == WorkflowPhase.POST_MARKET:
+            context = {
+                "market_overview": summary.market_overview,
+                "sector_positioning": summary.sector_positioning,
+                "position_health": summary.position_health,
+                "next_day_prep": summary.next_day_prep,
+                "watch_context": summary.watch_context,
+                "alerts": summary.alerts,
+            }
+        else:
+            context = {
+                "yesterday_recap": summary.yesterday_recap,
+                "overnight_news": summary.overnight_news,
+                "today_watchlist": summary.today_watchlist,
+                "action_frame": summary.action_frame,
+                "watch_context": summary.watch_context,
+                "alerts": summary.alerts,
+                "carry_over": summary.carry_over,
+            }
+        metadata = {
+            **summary.metadata,
+            "title": summary.title,
+            "overview": summary.overview,
+            "requested_date": summary.requested_date,
+            "resolved_date": summary.resolved_date,
+            "date_resolution": summary.date_resolution,
+            "execution_status": run.status.value,
+            "step_count": len(summary.steps),
+        }
+        return WorkflowContextPayload(
+            generated_at=run.finished_at or run.started_at,
+            workflow_run_id=run.id,
+            workflow_date=run.workflow_date,
+            phase=run.phase,
+            context=context,
+            metadata=metadata,
+        )
+
+    def get_latest_insight(
+        self,
+        phase: WorkflowPhase,
+        producer: str = "the_one",
+    ) -> WorkflowInsightResponse:
+        """Return the latest insight state for one phase and producer."""
+        latest_run = self.get_latest_run(phase)
+        insight = self._load_latest_insight(phase=phase, producer=producer)
+        state = self.compute_insight_state(latest_run, insight)
+        return WorkflowInsightResponse(
+            insight=insight,
+            state=state,
+            is_stale=state == InsightStatus.STALE,
+            latest_run_id=latest_run.id if latest_run else None,
+        )
+
+    def upsert_insight(self, payload: WorkflowInsightUpsertRequest) -> WorkflowInsightRecord:
+        """Create or replace the latest insight for one workflow date and phase."""
+        record = WorkflowInsightRecord(
+            id=time.time_ns(),
+            workflow_run_id=payload.source_run_id,
+            workflow_date=payload.workflow_date,
+            phase=payload.phase,
+            producer=payload.producer,
+            status=payload.status,
+            schema_version=payload.schema_version,
+            producer_version=payload.producer_version,
+            generated_at=payload.generated_at,
+            source_run_id=payload.source_run_id,
+            source_context_schema_version=payload.source_context_schema_version,
+            insight=payload.insight,
+            error_message=payload.error_message,
+            created_at=payload.generated_at,
+            updated_at=payload.generated_at,
+        )
+        conn = get_conn()
+        conn.execute(
+            """
+            INSERT INTO workflow_insights (
+                id, workflow_run_id, workflow_date, phase, producer, status,
+                schema_version, producer_version, source_run_id, source_context_schema_version,
+                insight_json, error_message, generated_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (workflow_date, phase, producer) DO UPDATE SET
+                id = excluded.id,
+                workflow_run_id = excluded.workflow_run_id,
+                status = excluded.status,
+                schema_version = excluded.schema_version,
+                producer_version = excluded.producer_version,
+                source_run_id = excluded.source_run_id,
+                source_context_schema_version = excluded.source_context_schema_version,
+                insight_json = excluded.insight_json,
+                error_message = excluded.error_message,
+                generated_at = excluded.generated_at,
+                updated_at = excluded.updated_at
+            """,
+            [
+                record.id,
+                record.workflow_run_id,
+                payload.workflow_date,
+                payload.phase.value,
+                payload.producer,
+                payload.status.value,
+                payload.schema_version,
+                payload.producer_version,
+                payload.source_run_id,
+                payload.source_context_schema_version,
+                json.dumps(payload.insight.model_dump(), ensure_ascii=False),
+                payload.error_message,
+                payload.generated_at,
+                payload.generated_at,
+                payload.generated_at,
+            ],
+        )
+        return self._load_latest_insight(phase=payload.phase, producer=payload.producer) or record
+
+    def compute_insight_state(
+        self,
+        latest_run: WorkflowRunRecord | None,
+        insight: WorkflowInsightRecord | None,
+    ) -> InsightStatus:
+        """Compute freshness-aware insight state for one phase."""
+        if insight is None:
+            return InsightStatus.NOT_REQUESTED
+        if insight.status == InsightStatus.FAILED:
+            return InsightStatus.FAILED
+        if insight.status == InsightStatus.PENDING:
+            return InsightStatus.PENDING
+        if latest_run is None:
+            return insight.status
+        if insight.source_run_id != latest_run.id:
+            return InsightStatus.STALE
+        return InsightStatus.COMPLETED if insight.status == InsightStatus.COMPLETED else insight.status
 
     def _resolve_requested_date(self, workflow_date: str | None) -> str:
         normalized = normalize_scan_date(workflow_date)
@@ -1226,3 +1374,37 @@ class DailyWorkflowService:
             "started_at": run.started_at.isoformat(),
             "finished_at": run.finished_at.isoformat() if run.finished_at else None,
         }
+
+    def _load_latest_insight(self, phase: WorkflowPhase, producer: str) -> WorkflowInsightRecord | None:
+        conn = get_conn()
+        row = conn.execute(
+            """
+            SELECT id, workflow_run_id, workflow_date, phase, producer, status,
+                   schema_version, producer_version, source_run_id, source_context_schema_version,
+                   insight_json, error_message, generated_at, created_at, updated_at
+            FROM workflow_insights
+            WHERE phase = ? AND producer = ?
+            ORDER BY workflow_date DESC, generated_at DESC, id DESC
+            LIMIT 1
+            """,
+            [phase.value, producer],
+        ).fetchone()
+        if row is None:
+            return None
+        return WorkflowInsightRecord(
+            id=row[0],
+            workflow_run_id=row[1],
+            workflow_date=str(row[2]),
+            phase=WorkflowPhase(str(row[3])),
+            producer=str(row[4]),
+            status=InsightStatus(str(row[5])),
+            schema_version=str(row[6]),
+            producer_version=str(row[7]),
+            source_run_id=row[8],
+            source_context_schema_version=str(row[9]),
+            insight=WorkflowInsightPayload(**json.loads(row[10])) if row[10] else WorkflowInsightPayload(),
+            error_message=row[11],
+            generated_at=row[12],
+            created_at=row[13],
+            updated_at=row[14],
+        )

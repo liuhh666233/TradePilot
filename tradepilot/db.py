@@ -183,6 +183,24 @@ def _init_tables(conn: duckdb.DuckDBPyConnection):
             summary_json TEXT NOT NULL,
             error_message TEXT
         );
+        CREATE TABLE IF NOT EXISTS workflow_insights (
+            id BIGINT PRIMARY KEY,
+            workflow_run_id BIGINT NOT NULL,
+            workflow_date DATE NOT NULL,
+            phase VARCHAR NOT NULL,
+            producer VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            schema_version VARCHAR NOT NULL,
+            producer_version VARCHAR NOT NULL,
+            source_run_id BIGINT NOT NULL,
+            source_context_schema_version VARCHAR NOT NULL,
+            insight_json TEXT,
+            error_message TEXT,
+            generated_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (workflow_date, phase, producer)
+        );
         CREATE TABLE IF NOT EXISTS portfolio (
             id INTEGER PRIMARY KEY,
             stock_code VARCHAR, stock_name VARCHAR,

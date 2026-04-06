@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from tradepilot.workflow.models import WorkflowPhase, WorkflowRunResponse, WorkflowTrigger
+from tradepilot.workflow.models import (
+    WorkflowContextPayload,
+    WorkflowInsightResponse,
+    WorkflowInsightUpsertRequest,
+    WorkflowPhase,
+    WorkflowRunResponse,
+    WorkflowTrigger,
+)
 from tradepilot.workflow.service import DailyWorkflowService
 
 router = APIRouter()
@@ -52,3 +59,27 @@ def run_post_market_workflow(workflow_date: str | None = None) -> WorkflowRunRes
         triggered_by=WorkflowTrigger.MANUAL,
     )
     return WorkflowRunResponse(run=run)
+
+
+@router.get("/context/latest", response_model=WorkflowContextPayload | None)
+def get_latest_workflow_context(
+    phase: WorkflowPhase = Query(..., description="Workflow phase to fetch context for"),
+) -> WorkflowContextPayload | None:
+    """Return the latest structured context for one workflow phase."""
+    return _service.get_latest_context(phase)
+
+
+@router.get("/insight/latest", response_model=WorkflowInsightResponse)
+def get_latest_workflow_insight(
+    phase: WorkflowPhase = Query(..., description="Workflow phase to fetch insight for"),
+    producer: str = Query("the_one", description="Insight producer identifier"),
+) -> WorkflowInsightResponse:
+    """Return the latest insight state for one workflow phase."""
+    return _service.get_latest_insight(phase=phase, producer=producer)
+
+
+@router.put("/insight", response_model=WorkflowInsightResponse)
+def upsert_workflow_insight(payload: WorkflowInsightUpsertRequest) -> WorkflowInsightResponse:
+    """Create or replace the latest workflow insight for one phase."""
+    _service.upsert_insight(payload)
+    return _service.get_latest_insight(phase=payload.phase, producer=payload.producer)
