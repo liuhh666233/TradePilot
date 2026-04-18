@@ -1,7 +1,6 @@
 from setuptools import setup, find_packages
 import unittest
 
-
 setup(
     name="you package name",
     version="0.0.1",

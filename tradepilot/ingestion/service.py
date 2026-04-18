@@ -20,7 +20,6 @@ from tradepilot.ingestion.models import (
     TriggerMode,
 )
 
-
 _STOCK_DAILY_COLS = "stock_code, date, open, high, low, close, volume, amount, turnover"
 _STOCK_WEEKLY_COLS = _STOCK_DAILY_COLS
 _STOCK_MONTHLY_COLS = _STOCK_DAILY_COLS

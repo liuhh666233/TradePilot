@@ -10,7 +10,6 @@ from loguru import logger
 
 from tradepilot.config import TUSHARE_TOKEN
 
-
 _TRADE_CALENDAR_COLUMNS = ("exchange", "trade_date", "is_open", "pretrade_date")
 _MARKET_DAILY_STATS_COLUMNS = (
     "trade_date",

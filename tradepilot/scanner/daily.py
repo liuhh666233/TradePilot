@@ -21,7 +21,6 @@ from tradepilot.config import DATA_ROOT
 from tradepilot.data import get_provider
 from tradepilot.db import get_conn
 
-
 CORE_INSTRUMENTS: list[dict[str, str]] = [
     {"code": "000001", "name": "上证指数", "kind": "index"},
     {"code": "399001", "name": "深证成指", "kind": "index"},
@@ -580,14 +579,12 @@ class DailyScanner:
 
     def _get_latest_market_stats(self) -> list[dict]:
         conn = get_conn()
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT trade_date, market_code, market_name, listed_count, total_mv, float_mv, amount, vol, pe, turnover_rate
             FROM market_daily_stats
             WHERE trade_date = (SELECT MAX(trade_date) FROM market_daily_stats)
             ORDER BY market_code ASC
-            """
-        ).fetchdf()
+            """).fetchdf()
         return rows.to_dict(orient="records")
 
 
