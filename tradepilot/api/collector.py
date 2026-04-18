@@ -2,7 +2,12 @@
 
 from fastapi import APIRouter
 
-from tradepilot.ingestion.models import BilibiliSyncRequest, NewsSyncRequest, SyncRequest, SyncResult
+from tradepilot.ingestion.models import (
+    BilibiliSyncRequest,
+    NewsSyncRequest,
+    SyncRequest,
+    SyncResult,
+)
 from tradepilot.ingestion.service import IngestionService
 
 router = APIRouter()

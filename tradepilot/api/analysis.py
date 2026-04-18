@@ -13,13 +13,17 @@ def _get_provider():
 
 
 @router.get("/technical")
-def technical(stock_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"):
+def technical(
+    stock_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"
+):
     kline = _get_provider().get_stock_daily(stock_code, start_date, end_date)
     return analyze_stock(kline)
 
 
 @router.get("/valuation")
-def valuation(stock_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"):
+def valuation(
+    stock_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"
+):
     val_df = _get_provider().get_stock_valuation(stock_code, start_date, end_date)
     kline = _get_provider().get_stock_daily(stock_code, start_date, end_date)
     return analyze_valuation(val_df, kline)

@@ -1,5 +1,10 @@
 from fastapi import APIRouter
-from tradepilot.analysis.fund_flow import analyze_etf_flow, analyze_margin, analyze_northbound, compute_market_sentiment
+from tradepilot.analysis.fund_flow import (
+    analyze_etf_flow,
+    analyze_margin,
+    analyze_northbound,
+    compute_market_sentiment,
+)
 from tradepilot.analysis.signal import compute_composite_score
 from tradepilot.analysis.technical import analyze_stock
 from tradepilot.analysis.valuation import analyze_valuation
@@ -17,7 +22,9 @@ def list_signals(stock_code: str):
     provider = _get_provider()
     kline = provider.get_stock_daily(stock_code, "2024-01-01", "2025-12-31")
     tech = analyze_stock(kline)
-    all_signals = tech["cross_signals"] + tech["divergence_signals"] + tech["volume_signals"]
+    all_signals = (
+        tech["cross_signals"] + tech["divergence_signals"] + tech["volume_signals"]
+    )
 
     val_df = provider.get_stock_valuation(stock_code, "2024-01-01", "2025-12-31")
     val = analyze_valuation(val_df, kline)
@@ -32,7 +39,9 @@ def composite_score(stock_code: str):
     provider = _get_provider()
     kline = provider.get_stock_daily(stock_code, "2024-01-01", "2025-12-31")
     tech = analyze_stock(kline)
-    all_tech = tech["cross_signals"] + tech["divergence_signals"] + tech["volume_signals"]
+    all_tech = (
+        tech["cross_signals"] + tech["divergence_signals"] + tech["volume_signals"]
+    )
 
     val_df = provider.get_stock_valuation(stock_code, "2024-01-01", "2025-12-31")
     val = analyze_valuation(val_df, kline)
@@ -63,4 +72,9 @@ def market_sentiment():
     nb_result = analyze_northbound(nb_df)
     margin_result = analyze_margin(margin_df)
     sentiment = compute_market_sentiment(etf_results, nb_result, margin_result)
-    return {"etf": etf_results, "northbound": nb_result, "margin": margin_result, "sentiment": sentiment}
+    return {
+        "etf": etf_results,
+        "northbound": nb_result,
+        "margin": margin_result,
+        "sentiment": sentiment,
+    }

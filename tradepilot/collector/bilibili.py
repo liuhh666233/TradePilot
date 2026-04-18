@@ -47,9 +47,18 @@ class BilibiliCollector:
                     VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT DO NOTHING
                     """,
-                    [item.source, item.source_item_id, item.title, item.video_url, item.file_path, item.published_at],
+                    [
+                        item.source,
+                        item.source_item_id,
+                        item.title,
+                        item.video_url,
+                        item.file_path,
+                        item.published_at,
+                    ],
                 )
                 inserted += 1
             except Exception:
-                logger.exception("Failed to persist video content {}", item.source_item_id)
+                logger.exception(
+                    "Failed to persist video content {}", item.source_item_id
+                )
         return inserted

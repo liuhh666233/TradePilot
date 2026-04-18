@@ -1,4 +1,5 @@
 """资金面分析: ETF资金流 / 两融 / 北向资金"""
+
 import pandas as pd
 
 
@@ -23,7 +24,9 @@ def analyze_etf_flow(etf_df: pd.DataFrame) -> dict:
                 break
         result[code] = {
             "net_5d": round(float(net_5d), 2),
-            "latest": round(float(recent_net.iloc[-1]), 2) if len(recent_net) > 0 else 0,
+            "latest": (
+                round(float(recent_net.iloc[-1]), 2) if len(recent_net) > 0 else 0
+            ),
             "trend_days": consecutive,
         }
     return result
@@ -58,7 +61,11 @@ def analyze_margin(margin_df: pd.DataFrame) -> dict:
         return {"total_balance": 0, "daily_change": 0, "trend_days": 0}
     daily = margin_df.groupby("date")["margin_balance"].sum().sort_index()
     if len(daily) < 2:
-        return {"total_balance": round(float(daily.iloc[-1]), 2), "daily_change": 0, "trend_days": 0}
+        return {
+            "total_balance": round(float(daily.iloc[-1]), 2),
+            "daily_change": 0,
+            "trend_days": 0,
+        }
     change = daily.diff()
     consecutive = 0
     for v in reversed(change.dropna().values):
@@ -75,7 +82,9 @@ def analyze_margin(margin_df: pd.DataFrame) -> dict:
     }
 
 
-def compute_market_sentiment(etf_result: dict, nb_result: dict, margin_result: dict) -> dict:
+def compute_market_sentiment(
+    etf_result: dict, nb_result: dict, margin_result: dict
+) -> dict:
     """综合市场情绪评分 (0-100)。"""
     score = 50  # 中性起点
 

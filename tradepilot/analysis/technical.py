@@ -1,4 +1,5 @@
 """技术分析: MACD / 背离 / 成交量异动"""
+
 import numpy as np
 import pandas as pd
 
@@ -26,9 +27,21 @@ def detect_cross(df: pd.DataFrame) -> list[dict]:
         curr_diff = row["dif"] - row["dea"]
         if prev_diff is not None:
             if prev_diff <= 0 < curr_diff:
-                signals.append({"date": str(row["date"]), "type": "golden_cross", "name": "MACD金叉"})
+                signals.append(
+                    {
+                        "date": str(row["date"]),
+                        "type": "golden_cross",
+                        "name": "MACD金叉",
+                    }
+                )
             elif prev_diff >= 0 > curr_diff:
-                signals.append({"date": str(row["date"]), "type": "death_cross", "name": "MACD死叉"})
+                signals.append(
+                    {
+                        "date": str(row["date"]),
+                        "type": "death_cross",
+                        "name": "MACD死叉",
+                    }
+                )
         prev_diff = curr_diff
     return signals
 
@@ -43,22 +56,40 @@ def detect_divergence(df: pd.DataFrame, window: int = 60) -> list[dict]:
     lows = []
     highs = []
     for i in range(2, len(recent) - 2):
-        if recent["close"].iloc[i] <= recent["close"].iloc[i - 2:i + 3].min():
+        if recent["close"].iloc[i] <= recent["close"].iloc[i - 2 : i + 3].min():
             lows.append(i)
-        if recent["close"].iloc[i] >= recent["close"].iloc[i - 2:i + 3].max():
+        if recent["close"].iloc[i] >= recent["close"].iloc[i - 2 : i + 3].max():
             highs.append(i)
 
     # 底背离: 价格新低但 DIF 未新低
     if len(lows) >= 2:
         i1, i2 = lows[-2], lows[-1]
-        if recent["close"].iloc[i2] < recent["close"].iloc[i1] and recent["dif"].iloc[i2] > recent["dif"].iloc[i1]:
-            signals.append({"date": str(recent["date"].iloc[i2]), "type": "bull_divergence", "name": "底背离"})
+        if (
+            recent["close"].iloc[i2] < recent["close"].iloc[i1]
+            and recent["dif"].iloc[i2] > recent["dif"].iloc[i1]
+        ):
+            signals.append(
+                {
+                    "date": str(recent["date"].iloc[i2]),
+                    "type": "bull_divergence",
+                    "name": "底背离",
+                }
+            )
 
     # 顶背离: 价格新高但 DIF 未新高
     if len(highs) >= 2:
         i1, i2 = highs[-2], highs[-1]
-        if recent["close"].iloc[i2] > recent["close"].iloc[i1] and recent["dif"].iloc[i2] < recent["dif"].iloc[i1]:
-            signals.append({"date": str(recent["date"].iloc[i2]), "type": "bear_divergence", "name": "顶背离"})
+        if (
+            recent["close"].iloc[i2] > recent["close"].iloc[i1]
+            and recent["dif"].iloc[i2] < recent["dif"].iloc[i1]
+        ):
+            signals.append(
+                {
+                    "date": str(recent["date"].iloc[i2]),
+                    "type": "bear_divergence",
+                    "name": "顶背离",
+                }
+            )
 
     return signals
 
@@ -73,19 +104,27 @@ def detect_volume_anomaly(df: pd.DataFrame) -> list[dict]:
     df["vol_ratio"] = df["volume"] / df["vol_ma5"]
     df["high_20"] = df["close"].rolling(20).max()
     df["low_20"] = df["close"].rolling(20).min()
-    df["position"] = (df["close"] - df["low_20"]) / (df["high_20"] - df["low_20"] + 1e-10)
+    df["position"] = (df["close"] - df["low_20"]) / (
+        df["high_20"] - df["low_20"] + 1e-10
+    )
 
     last = df.iloc[-1]
     # 放量突破
     if last["vol_ratio"] > 2 and last["close"] >= last["high_20"] * 0.98:
-        signals.append({"date": str(last["date"]), "type": "volume_breakout", "name": "放量突破"})
+        signals.append(
+            {"date": str(last["date"]), "type": "volume_breakout", "name": "放量突破"}
+        )
     # 高位缩量
     if last["vol_ratio"] < 0.5 and last["position"] > 0.8:
-        signals.append({"date": str(last["date"]), "type": "high_shrink", "name": "高位缩量"})
+        signals.append(
+            {"date": str(last["date"]), "type": "high_shrink", "name": "高位缩量"}
+        )
     # 地量
     vol_min_60 = df["volume"].tail(60).min() if len(df) >= 60 else df["volume"].min()
     if last["volume"] <= vol_min_60 * 1.05:
-        signals.append({"date": str(last["date"]), "type": "extreme_low_volume", "name": "地量"})
+        signals.append(
+            {"date": str(last["date"]), "type": "extreme_low_volume", "name": "地量"}
+        )
 
     return signals
 
@@ -94,7 +133,9 @@ def analyze_stock(df: pd.DataFrame) -> dict:
     """对一只股票做完整技术分析。df 需含 date, open, high, low, close, volume。"""
     df = compute_macd(df)
     return {
-        "macd": df[["date", "close", "volume", "dif", "dea", "macd"]].to_dict(orient="records"),
+        "macd": df[["date", "close", "volume", "dif", "dea", "macd"]].to_dict(
+            orient="records"
+        ),
         "cross_signals": detect_cross(df),
         "divergence_signals": detect_divergence(df),
         "volume_signals": detect_volume_anomaly(df),

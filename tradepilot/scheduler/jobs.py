@@ -62,7 +62,9 @@ def _run_workflow_job(job_name: str, runner) -> dict:
     try:
         run = runner()
         affected = sum(step.records_affected for step in run.summary.steps)
-        _record_history(job_name, started_at, run.status.value, affected, run.error_message)
+        _record_history(
+            job_name, started_at, run.status.value, affected, run.error_message
+        )
         if run.status.value in {"failed", "partial"} and run.error_message:
             _create_failure_alert(job_name, run.error_message)
         return {
@@ -89,7 +91,9 @@ def post_market_workflow_job() -> dict:
     service = DailyWorkflowService()
     return _run_workflow_job(
         "post_market_workflow",
-        lambda: service.run_post_market_workflow(triggered_by=WorkflowTrigger.SCHEDULER),
+        lambda: service.run_post_market_workflow(
+            triggered_by=WorkflowTrigger.SCHEDULER
+        ),
     )
 
 

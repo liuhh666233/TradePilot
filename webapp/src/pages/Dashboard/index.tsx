@@ -14,7 +14,7 @@ import {
   Tag,
   Typography,
 } from "antd";
-import OvernightNewsTabs, { newsCategoryLabel, newsDirectionColor, newsDirectionLabel } from "./OvernightNewsTabs";
+import OvernightNewsTabs, { newsDirectionColor, newsDirectionLabel } from "./OvernightNewsTabs";
 import { HistoryOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
   getLatestWorkflow,

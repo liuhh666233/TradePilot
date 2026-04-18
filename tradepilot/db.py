@@ -208,7 +208,9 @@ def _init_tables(conn: duckdb.DuckDBPyConnection):
             status VARCHAR DEFAULT 'open'
         );
     """)
-    news_columns = {row[1] for row in conn.execute("PRAGMA table_info('news_items')").fetchall()}
+    news_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info('news_items')").fetchall()
+    }
     if "url" not in news_columns:
         conn.execute("ALTER TABLE news_items ADD COLUMN url VARCHAR")
     conn.execute("""

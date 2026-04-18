@@ -21,7 +21,6 @@ from tradepilot.config import DATA_ROOT
 from tradepilot.data import get_provider
 from tradepilot.db import get_conn
 
-
 CORE_INSTRUMENTS: list[dict[str, str]] = [
     {"code": "000001", "name": "上证指数", "kind": "index"},
     {"code": "399001", "name": "深证成指", "kind": "index"},
@@ -157,7 +156,9 @@ class DailyScanner:
         rows = conn.execute(query).fetchdf()
         return rows.to_dict(orient="records")
 
-    def create_system_alert(self, title: str, message: str, urgency: str = "high") -> None:
+    def create_system_alert(
+        self, title: str, message: str, urgency: str = "high"
+    ) -> None:
         conn = get_conn()
         conn.execute(
             """
@@ -194,10 +195,12 @@ class DailyScanner:
             code = str(item.get("code", "")).strip()
             if not code:
                 continue
-            results.append({
-                "code": code,
-                "name": str(item.get("name", "")).strip(),
-            })
+            results.append(
+                {
+                    "code": code,
+                    "name": str(item.get("name", "")).strip(),
+                }
+            )
         return results
 
     def _load_positions(self) -> list[dict]:
@@ -213,7 +216,9 @@ class DailyScanner:
         sentiment: dict,
         sector_result: dict,
     ) -> StockAdvice:
-        evaluation = self._evaluate_stock(stock["code"], stock.get("name", ""), sentiment, sector_result)
+        evaluation = self._evaluate_stock(
+            stock["code"], stock.get("name", ""), sentiment, sector_result
+        )
         score = evaluation["score"]
         action = "观望"
         urgency = "无需操作"
@@ -263,7 +268,9 @@ class DailyScanner:
             market_sentiment=market_sentiment,
             sector_position=sector_position,
         )
-        evaluation = self._evaluate_stock(stock_code, stock_name, market_sentiment, sector_result)
+        evaluation = self._evaluate_stock(
+            stock_code, stock_name, market_sentiment, sector_result
+        )
 
         action = "持有"
         urgency = "无需操作"
@@ -342,9 +349,7 @@ class DailyScanner:
         valuation = analyze_valuation(valuation_df, kline)
         sector_position = self._resolve_sector_position(stock_code, sector_result)
         technical_signals = (
-            tech["cross_signals"]
-            + tech["divergence_signals"]
-            + tech["volume_signals"]
+            tech["cross_signals"] + tech["divergence_signals"] + tech["volume_signals"]
         )[-12:]
         composite = compute_composite_score(
             technical_signals,
@@ -353,7 +358,9 @@ class DailyScanner:
             sector_position,
         )
         current_price = float(kline["close"].iloc[-1])
-        support_price = float(kline["low"].tail(20).min()) if len(kline) >= 20 else current_price
+        support_price = (
+            float(kline["low"].tail(20).min()) if len(kline) >= 20 else current_price
+        )
 
         risk_alerts: list[str] = []
         if sector_position == "high":
@@ -387,13 +394,19 @@ class DailyScanner:
         margin = analyze_margin(margin_df)
         return compute_market_sentiment(etf_result, northbound, margin)
 
-    def _resolve_sector_position(self, stock_code: str, sector_result: dict) -> str | None:
+    def _resolve_sector_position(
+        self, stock_code: str, sector_result: dict
+    ) -> str | None:
         mapping = self._provider.get_stock_sector(stock_code)
         if mapping.empty:
             return None
         sectors = {str(row["sector"]) for _, row in mapping.iterrows()}
-        high_sectors = {item["sector"] for item in sector_result.get("high_positions", [])}
-        low_sectors = {item["sector"] for item in sector_result.get("low_opportunities", [])}
+        high_sectors = {
+            item["sector"] for item in sector_result.get("high_positions", [])
+        }
+        low_sectors = {
+            item["sector"] for item in sector_result.get("low_opportunities", [])
+        }
         if sectors & high_sectors:
             return "high"
         if sectors & low_sectors:
@@ -416,7 +429,8 @@ class DailyScanner:
                         urgency="high",
                         stock_code=advice.stock_code,
                         title=f"{advice.stock_name} 触发风控信号",
-                        message="；".join(advice.risk_alerts[:3]) or "触发止损/风控条件",
+                        message="；".join(advice.risk_alerts[:3])
+                        or "触发止损/风控条件",
                     )
                 )
             elif advice.action == "减仓":
@@ -468,8 +482,14 @@ class DailyScanner:
 
     def _persist_scan_results(self, result: DailyScanResult) -> None:
         conn = get_conn()
-        conn.execute("DELETE FROM daily_scan_results WHERE scan_date = ?", [result.scan_date])
-        rows = result.watchlist_advice + result.position_advice + result.core_instrument_advice
+        conn.execute(
+            "DELETE FROM daily_scan_results WHERE scan_date = ?", [result.scan_date]
+        )
+        rows = (
+            result.watchlist_advice
+            + result.position_advice
+            + result.core_instrument_advice
+        )
         for index, advice in enumerate(rows, 1):
             conn.execute(
                 """
@@ -559,14 +579,12 @@ class DailyScanner:
 
     def _get_latest_market_stats(self) -> list[dict]:
         conn = get_conn()
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT trade_date, market_code, market_name, listed_count, total_mv, float_mv, amount, vol, pe, turnover_rate
             FROM market_daily_stats
             WHERE trade_date = (SELECT MAX(trade_date) FROM market_daily_stats)
             ORDER BY market_code ASC
-            """
-        ).fetchdf()
+            """).fetchdf()
         return rows.to_dict(orient="records")
 
 

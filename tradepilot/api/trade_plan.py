@@ -1,10 +1,16 @@
 """交易计划 CRUD + 评估接口"""
+
 import json
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from tradepilot.analysis.fund_flow import analyze_etf_flow, analyze_margin, analyze_northbound, compute_market_sentiment
+from tradepilot.analysis.fund_flow import (
+    analyze_etf_flow,
+    analyze_margin,
+    analyze_northbound,
+    compute_market_sentiment,
+)
 from tradepilot.analysis.risk import evaluate_stop_loss, evaluate_take_profit
 from tradepilot.analysis.sector_rotation import analyze_sectors
 from tradepilot.analysis.signal import compute_composite_score
@@ -47,7 +53,9 @@ def _evaluate_stock(stock_code: str) -> dict:
 
     # 技术分析
     tech = analyze_stock(kline)
-    all_tech_signals = tech["cross_signals"] + tech["divergence_signals"] + tech["volume_signals"]
+    all_tech_signals = (
+        tech["cross_signals"] + tech["divergence_signals"] + tech["volume_signals"]
+    )
 
     # 估值分析
     val = analyze_valuation(valuation_df, kline)
@@ -69,12 +77,19 @@ def _evaluate_stock(stock_code: str) -> dict:
         sector_position = "high"
 
     # 综合评分
-    composite = compute_composite_score(all_tech_signals, val, sentiment, sector_position)
+    composite = compute_composite_score(
+        all_tech_signals, val, sentiment, sector_position
+    )
 
     # 建仓条件汇总
     entry_conditions = []
     for s in all_tech_signals:
-        if s["type"] in ("golden_cross", "bull_divergence", "volume_breakout", "extreme_low_volume"):
+        if s["type"] in (
+            "golden_cross",
+            "bull_divergence",
+            "volume_breakout",
+            "extreme_low_volume",
+        ):
             entry_conditions.append(f"✓ {s['name']}")
     for s in val.get("signals", []):
         if s.get("direction") == "buy":
@@ -86,10 +101,20 @@ def _evaluate_stock(stock_code: str) -> dict:
 
     # 止损/止盈条件
     stop_conditions = ["周线MACD死叉", "跌破20日支撑位", "放量下跌"]
-    profit_conditions = ["周线MACD死叉", "顶背离", "高位缩量", "市场情绪过热", "板块高位预警"]
+    profit_conditions = [
+        "周线MACD死叉",
+        "顶背离",
+        "高位缩量",
+        "市场情绪过热",
+        "板块高位预警",
+    ]
 
     # 建议价位
-    support = kline["low"].tail(20).min() if len(kline) >= 20 else kline["close"].iloc[-1] * 0.95
+    support = (
+        kline["low"].tail(20).min()
+        if len(kline) >= 20
+        else kline["close"].iloc[-1] * 0.95
+    )
     current = kline["close"].iloc[-1]
 
     return {
@@ -123,9 +148,14 @@ def evaluate(stock_code: str):
 def list_plans(status: str | None = None):
     conn = get_conn()
     if status:
-        rows = conn.execute("SELECT * FROM trade_plan WHERE status = ? ORDER BY created_at DESC", [status]).fetchdf()
+        rows = conn.execute(
+            "SELECT * FROM trade_plan WHERE status = ? ORDER BY created_at DESC",
+            [status],
+        ).fetchdf()
     else:
-        rows = conn.execute("SELECT * FROM trade_plan ORDER BY created_at DESC").fetchdf()
+        rows = conn.execute(
+            "SELECT * FROM trade_plan ORDER BY created_at DESC"
+        ).fetchdf()
     return rows.to_dict(orient="records")
 
 
@@ -138,7 +168,8 @@ def create_plan(plan: PlanCreate):
     stop_loss_price = round(entry_price * (1 + plan.stop_loss_pct / 100), 2)
     take_profit_price = round(entry_price * (1 + plan.take_profit_pct / 100), 2)
 
-    conn.execute("""
+    conn.execute(
+        """
         INSERT INTO trade_plan (
             stock_code, stock_name,
             entry_target_price, entry_quantity, entry_reason, entry_conditions,
@@ -146,18 +177,25 @@ def create_plan(plan: PlanCreate):
             take_profit_price, take_profit_pct, take_profit_conditions,
             risk_reward_ratio, composite_score, signal_summary
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, [
-        plan.stock_code, plan.stock_name,
-        entry_price, plan.entry_quantity, plan.entry_reason,
-        json.dumps(evaluation["entry_conditions"], ensure_ascii=False),
-        stop_loss_price, plan.stop_loss_pct,
-        json.dumps(evaluation["stop_loss_conditions"], ensure_ascii=False),
-        take_profit_price, plan.take_profit_pct,
-        json.dumps(evaluation["take_profit_conditions"], ensure_ascii=False),
-        evaluation.get("risk_reward_ratio"),
-        evaluation["composite_score"],
-        json.dumps(evaluation["reasons"], ensure_ascii=False),
-    ])
+    """,
+        [
+            plan.stock_code,
+            plan.stock_name,
+            entry_price,
+            plan.entry_quantity,
+            plan.entry_reason,
+            json.dumps(evaluation["entry_conditions"], ensure_ascii=False),
+            stop_loss_price,
+            plan.stop_loss_pct,
+            json.dumps(evaluation["stop_loss_conditions"], ensure_ascii=False),
+            take_profit_price,
+            plan.take_profit_pct,
+            json.dumps(evaluation["take_profit_conditions"], ensure_ascii=False),
+            evaluation.get("risk_reward_ratio"),
+            evaluation["composite_score"],
+            json.dumps(evaluation["reasons"], ensure_ascii=False),
+        ],
+    )
     return {"status": "ok", "evaluation": evaluation}
 
 
@@ -167,10 +205,17 @@ def update_plan_status(plan_id: int, update: PlanStatusUpdate):
     if update.entry_actual_price and update.entry_triggered_at:
         conn.execute(
             "UPDATE trade_plan SET status = ?, entry_actual_price = ?, entry_triggered_at = ? WHERE id = ?",
-            [update.status, update.entry_actual_price, update.entry_triggered_at, plan_id],
+            [
+                update.status,
+                update.entry_actual_price,
+                update.entry_triggered_at,
+                plan_id,
+            ],
         )
     else:
-        conn.execute("UPDATE trade_plan SET status = ? WHERE id = ?", [update.status, plan_id])
+        conn.execute(
+            "UPDATE trade_plan SET status = ? WHERE id = ?", [update.status, plan_id]
+        )
     return {"status": "ok"}
 
 
@@ -207,10 +252,24 @@ def monitor_plan(plan_id: int):
     if sector_result.get("high_positions"):
         sector_position = "high"
 
-    sl = evaluate_stop_loss(plan["entry_actual_price"], current_price, plan["stop_loss_pct"], kline)
-    tp = evaluate_take_profit(plan["entry_actual_price"], current_price, plan["take_profit_pct"], kline, sentiment, sector_position)
+    sl = evaluate_stop_loss(
+        plan["entry_actual_price"], current_price, plan["stop_loss_pct"], kline
+    )
+    tp = evaluate_take_profit(
+        plan["entry_actual_price"],
+        current_price,
+        plan["take_profit_pct"],
+        kline,
+        sentiment,
+        sector_position,
+    )
 
-    return {"plan": plan, "current_price": current_price, "stop_loss": sl, "take_profit": tp}
+    return {
+        "plan": plan,
+        "current_price": current_price,
+        "stop_loss": sl,
+        "take_profit": tp,
+    }
 
 
 @router.delete("/{plan_id}")

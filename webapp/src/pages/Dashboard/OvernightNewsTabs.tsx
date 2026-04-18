@@ -183,7 +183,7 @@ export default function OvernightNewsTabs({ highlights, categorizedNews, sectorM
                             <Text>{news.title}</Text>
                           )}
                           {(news.matched_aliases || []).length > 0 ? (
-                            <span style={{ color: "#999" }}> · 匹配 {news.matched_aliases.join("/")}</span>
+                            <span style={{ color: "#999" }}> · 匹配 {(news.matched_aliases || []).join("/")}</span>
                           ) : null}
                         </div>
                       ))}

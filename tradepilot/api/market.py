@@ -19,7 +19,9 @@ def list_stocks():
 
 
 @router.get("/stock_daily")
-def stock_daily(stock_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"):
+def stock_daily(
+    stock_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"
+):
     df = _get_provider().get_stock_daily(stock_code, start_date, end_date)
     return _records(df)
 
@@ -30,13 +32,17 @@ def list_indices():
 
 
 @router.get("/index_daily")
-def index_daily(index_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"):
+def index_daily(
+    index_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"
+):
     df = _get_provider().get_index_daily(index_code, start_date, end_date)
     return _records(df)
 
 
 @router.get("/etf_flow")
-def etf_flow(etf_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"):
+def etf_flow(
+    etf_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"
+):
     df = _get_provider().get_etf_flow(etf_code, start_date, end_date)
     return _records(df)
 
@@ -54,7 +60,9 @@ def margin(start_date: str = "2024-01-01", end_date: str = "2025-12-31"):
 
 
 @router.get("/valuation")
-def valuation(stock_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"):
+def valuation(
+    stock_code: str, start_date: str = "2024-01-01", end_date: str = "2025-12-31"
+):
     df = _get_provider().get_stock_valuation(stock_code, start_date, end_date)
     return _records(df)
 

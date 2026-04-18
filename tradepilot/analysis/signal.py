@@ -20,7 +20,12 @@ def compute_composite_score(
     # 技术面 (权重 20%)
     tech_score = 0
     for s in technical_signals:
-        if s["type"] in ("golden_cross", "bull_divergence", "volume_breakout", "extreme_low_volume"):
+        if s["type"] in (
+            "golden_cross",
+            "bull_divergence",
+            "volume_breakout",
+            "extreme_low_volume",
+        ):
             tech_score += 15
             reasons.append(f"✓ {s['name']}")
         elif s["type"] in ("death_cross", "bear_divergence", "high_shrink"):

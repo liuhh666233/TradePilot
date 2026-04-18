@@ -44,7 +44,6 @@ DEFAULT_BREADTH = {
 }
 
 
-
 # ---------------------------------------------------------------------------
 # Parsing / normalization helpers
 # ---------------------------------------------------------------------------
@@ -127,10 +126,12 @@ def _parse_watch_stocks(raw: str) -> list[dict]:
         if not code:
             continue
 
-        records.append({
-            "code": code,
-            "name": _safe_str(name_part),
-        })
+        records.append(
+            {
+                "code": code,
+                "name": _safe_str(name_part),
+            }
+        )
     return records
 
 
@@ -233,24 +234,18 @@ def fetch_indices() -> list[dict]:
     em_name_map: dict[str, pd.Series] = {}
     if em_df is not None:
         em_code_map = {
-            _normalize_code(row.get("代码")): row
-            for _, row in em_df.iterrows()
+            _normalize_code(row.get("代码")): row for _, row in em_df.iterrows()
         }
-        em_name_map = {
-            _safe_str(row.get("名称")): row
-            for _, row in em_df.iterrows()
-        }
+        em_name_map = {_safe_str(row.get("名称")): row for _, row in em_df.iterrows()}
 
     sina_code_map: dict[str, pd.Series] = {}
     sina_name_map: dict[str, pd.Series] = {}
     if sina_df is not None:
         sina_code_map = {
-            _normalize_code(row.get("代码")): row
-            for _, row in sina_df.iterrows()
+            _normalize_code(row.get("代码")): row for _, row in sina_df.iterrows()
         }
         sina_name_map = {
-            _safe_str(row.get("名称")): row
-            for _, row in sina_df.iterrows()
+            _safe_str(row.get("名称")): row for _, row in sina_df.iterrows()
         }
 
     results: list[dict] = []
@@ -259,30 +254,34 @@ def fetch_indices() -> list[dict]:
         if row is None:
             row = em_name_map.get(name)
         if row is not None:
-            results.append({
-                "code": _normalize_code(row.get("代码")) or code,
-                "name": _safe_str(row.get("名称")) or name,
-                "close": _safe_float(row.get("最新价")),
-                "change_pct": _safe_float(row.get("涨跌幅")),
-                "change_val": _safe_float(row.get("涨跌额")),
-                "volume": _safe_float(row.get("成交量")),
-                "turnover": _safe_float(row.get("成交额")),
-            })
+            results.append(
+                {
+                    "code": _normalize_code(row.get("代码")) or code,
+                    "name": _safe_str(row.get("名称")) or name,
+                    "close": _safe_float(row.get("最新价")),
+                    "change_pct": _safe_float(row.get("涨跌幅")),
+                    "change_val": _safe_float(row.get("涨跌额")),
+                    "volume": _safe_float(row.get("成交量")),
+                    "turnover": _safe_float(row.get("成交额")),
+                }
+            )
             continue
 
         row = sina_code_map.get(code)
         if row is None:
             row = sina_name_map.get(name)
         if row is not None:
-            results.append({
-                "code": _normalize_code(row.get("代码")) or code,
-                "name": _safe_str(row.get("名称")) or name,
-                "close": _safe_float(row.get("最新价")),
-                "change_pct": _safe_float(row.get("涨跌幅")),
-                "change_val": _safe_float(row.get("涨跌额")),
-                "volume": _safe_float(row.get("成交量")),
-                "turnover": _safe_float(row.get("成交额")),
-            })
+            results.append(
+                {
+                    "code": _normalize_code(row.get("代码")) or code,
+                    "name": _safe_str(row.get("名称")) or name,
+                    "close": _safe_float(row.get("最新价")),
+                    "change_pct": _safe_float(row.get("涨跌幅")),
+                    "change_val": _safe_float(row.get("涨跌额")),
+                    "volume": _safe_float(row.get("成交量")),
+                    "turnover": _safe_float(row.get("成交额")),
+                }
+            )
             continue
 
         results.append(_default_item(code, name))
@@ -321,14 +320,16 @@ def fetch_sectors(
 
     records: list[dict] = []
     for _, row in df.iterrows():
-        records.append({
-            "code": _safe_str(row.get("板块代码")),
-            "name": _safe_str(row.get("板块名称")),
-            "change_pct": _safe_float(row.get("涨跌幅")),
-            "up_count": _safe_int(row.get("上涨家数")),
-            "down_count": _safe_int(row.get("下跌家数")),
-            "leader": _safe_str(row.get("领涨股票")),
-        })
+        records.append(
+            {
+                "code": _safe_str(row.get("板块代码")),
+                "name": _safe_str(row.get("板块名称")),
+                "change_pct": _safe_float(row.get("涨跌幅")),
+                "up_count": _safe_int(row.get("上涨家数")),
+                "down_count": _safe_int(row.get("下跌家数")),
+                "leader": _safe_str(row.get("领涨股票")),
+            }
+        )
 
     return _sort_records(records, top_n, ascending)
 
@@ -446,7 +447,11 @@ def compute_market_regime(indices: list[dict], breadth: dict) -> dict:
     breadth_component = ((up - down) / total * 100) if total else 0.0
     limit_component = ((limit_up - limit_down) / total * 1000) if total else 0.0
 
-    score = _clip(index_component * 0.4 + breadth_component * 0.4 + limit_component * 0.2, -100.0, 100.0)
+    score = _clip(
+        index_component * 0.4 + breadth_component * 0.4 + limit_component * 0.2,
+        -100.0,
+        100.0,
+    )
 
     if score >= 20:
         label = "risk_on"
@@ -491,15 +496,17 @@ def extract_watch_sectors(concepts: list[dict], watch_names: list[str]) -> list[
     for watch_name in watch_names:
         matched = _find_sector_match(concepts, watch_name)
         if matched is None:
-            results.append({
-                "name": watch_name,
-                "matched_name": "",
-                "change_pct": 0.0,
-                "up_count": 0,
-                "down_count": 0,
-                "strength": 0.0,
-                "status": "missing",
-            })
+            results.append(
+                {
+                    "name": watch_name,
+                    "matched_name": "",
+                    "change_pct": 0.0,
+                    "up_count": 0,
+                    "down_count": 0,
+                    "strength": 0.0,
+                    "status": "missing",
+                }
+            )
             continue
 
         up_count = _safe_int(matched.get("up_count"))
@@ -514,24 +521,27 @@ def extract_watch_sectors(concepts: list[dict], watch_names: list[str]) -> list[
         elif change_pct <= -2.0 and strength <= 0.4:
             status = "weak"
 
-        results.append({
-            "name": watch_name,
-            "matched_name": _safe_str(matched.get("name")) or watch_name,
-            "change_pct": round(change_pct, 2),
-            "up_count": up_count,
-            "down_count": down_count,
-            "strength": round(strength, 2),
-            "status": status,
-        })
+        results.append(
+            {
+                "name": watch_name,
+                "matched_name": _safe_str(matched.get("name")) or watch_name,
+                "change_pct": round(change_pct, 2),
+                "up_count": up_count,
+                "down_count": down_count,
+                "strength": round(strength, 2),
+                "status": status,
+            }
+        )
 
     return results
 
 
-def extract_watch_stocks(snapshot_df: pd.DataFrame, watch_stocks: list[dict]) -> list[dict]:
+def extract_watch_stocks(
+    snapshot_df: pd.DataFrame, watch_stocks: list[dict]
+) -> list[dict]:
     """Extract watchlist stock records and classify signal status."""
     code_map: dict[str, pd.Series] = {
-        _normalize_code(row.get("代码")): row
-        for _, row in snapshot_df.iterrows()
+        _normalize_code(row.get("代码")): row for _, row in snapshot_df.iterrows()
     }
 
     results: list[dict] = []
@@ -541,16 +551,18 @@ def extract_watch_stocks(snapshot_df: pd.DataFrame, watch_stocks: list[dict]) ->
         row = code_map.get(code)
 
         if row is None:
-            results.append({
-                "code": code,
-                "name": watch_name,
-                "price": 0.0,
-                "change_pct": 0.0,
-                "change_val": 0.0,
-                "turnover_rate": 0.0,
-                "volume_ratio": 0.0,
-                "status": "missing",
-            })
+            results.append(
+                {
+                    "code": code,
+                    "name": watch_name,
+                    "price": 0.0,
+                    "change_pct": 0.0,
+                    "change_val": 0.0,
+                    "turnover_rate": 0.0,
+                    "volume_ratio": 0.0,
+                    "status": "missing",
+                }
+            )
             continue
 
         price = _safe_float(row.get("最新价"))
@@ -567,21 +579,25 @@ def extract_watch_stocks(snapshot_df: pd.DataFrame, watch_stocks: list[dict]) ->
         elif abs(change_pct) >= 1.5 and (turnover_rate >= 5.0 or volume_ratio >= 1.5):
             status = "active"
 
-        results.append({
-            "code": code,
-            "name": _safe_str(row.get("名称")) or watch_name,
-            "price": round(price, 2),
-            "change_pct": round(change_pct, 2),
-            "change_val": round(change_val, 2),
-            "turnover_rate": round(turnover_rate, 2),
-            "volume_ratio": round(volume_ratio, 2),
-            "status": status,
-        })
+        results.append(
+            {
+                "code": code,
+                "name": _safe_str(row.get("名称")) or watch_name,
+                "price": round(price, 2),
+                "change_pct": round(change_pct, 2),
+                "change_val": round(change_val, 2),
+                "turnover_rate": round(turnover_rate, 2),
+                "volume_ratio": round(volume_ratio, 2),
+                "status": status,
+            }
+        )
 
     return results
 
 
-def build_5m_alerts(regime: dict, sector_watchlist: list[dict], stock_watchlist: list[dict]) -> list[str]:
+def build_5m_alerts(
+    regime: dict, sector_watchlist: list[dict], stock_watchlist: list[dict]
+) -> list[str]:
     """Build human-readable alerts from 5m regime and watchlist signals."""
     alerts: list[str] = []
 
@@ -596,16 +612,22 @@ def build_5m_alerts(regime: dict, sector_watchlist: list[dict], stock_watchlist:
         status = _safe_str(sector.get("status"))
         name = _safe_str(sector.get("matched_name")) or _safe_str(sector.get("name"))
         if status == "strong":
-            alerts.append(f"板块走强：{name} ({_safe_float(sector.get('change_pct')):+.2f}%)")
+            alerts.append(
+                f"板块走强：{name} ({_safe_float(sector.get('change_pct')):+.2f}%)"
+            )
         elif status == "weak":
-            alerts.append(f"板块走弱：{name} ({_safe_float(sector.get('change_pct')):+.2f}%)")
+            alerts.append(
+                f"板块走弱：{name} ({_safe_float(sector.get('change_pct')):+.2f}%)"
+            )
 
     for stock in stock_watchlist:
         status = _safe_str(stock.get("status"))
         name = _safe_str(stock.get("name"))
         change_pct = _safe_float(stock.get("change_pct"))
         if status in {"breakout", "breakdown", "active"}:
-            alerts.append(f"个股{status}：{name} {_safe_str(stock.get('code'))} ({change_pct:+.2f}%)")
+            alerts.append(
+                f"个股{status}：{name} {_safe_str(stock.get('code'))} ({change_pct:+.2f}%)"
+            )
 
     return alerts
 
@@ -824,12 +846,24 @@ def format_5m_brief(
 
 
 @click.command()
-@click.option("--industry-top", "n_ind_top", default=10, help="Top N gaining industries.")
-@click.option("--industry-bottom", "n_ind_bot", default=10, help="Top N losing industries.")
+@click.option(
+    "--industry-top", "n_ind_top", default=10, help="Top N gaining industries."
+)
+@click.option(
+    "--industry-bottom", "n_ind_bot", default=10, help="Top N losing industries."
+)
 @click.option("--concept-top", "n_con_top", default=15, help="Top N gaining concepts.")
-@click.option("--concept-bottom", "n_con_bot", default=15, help="Top N losing concepts.")
-@click.option("--json-only", is_flag=True, help="Output raw JSON to stdout, skip markdown.")
-@click.option("--skip-breadth", is_flag=True, help="Skip market breadth (faster, fewer API calls).")
+@click.option(
+    "--concept-bottom", "n_con_bot", default=15, help="Top N losing concepts."
+)
+@click.option(
+    "--json-only", is_flag=True, help="Output raw JSON to stdout, skip markdown."
+)
+@click.option(
+    "--skip-breadth",
+    is_flag=True,
+    help="Skip market breadth (faster, fewer API calls).",
+)
 @click.option(
     "--mode",
     type=click.Choice(["daily", "5m"]),
@@ -868,19 +902,33 @@ def main(
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
     now_str = now.strftime("%Y-%m-%d %H:%M")
-    print(f"[a-share] fetching market data for {today} (mode={mode})...", file=sys.stderr)
+    print(
+        f"[a-share] fetching market data for {today} (mode={mode})...", file=sys.stderr
+    )
 
     if mode == "5m":
         config_sectors, config_stocks = load_watch_config(watch_config)
-        sector_names = _parse_watch_sector_names(watch_sectors) if watch_sectors else config_sectors
-        stock_watch = _parse_watch_stocks(watch_stocks) if watch_stocks else config_stocks
+        sector_names = (
+            _parse_watch_sector_names(watch_sectors)
+            if watch_sectors
+            else config_sectors
+        )
+        stock_watch = (
+            _parse_watch_stocks(watch_stocks) if watch_stocks else config_stocks
+        )
 
         if not sector_names:
-            print("[a-share] 5m mode requires watch sectors (use --watch-config or --watch-sectors)", file=sys.stderr)
+            print(
+                "[a-share] 5m mode requires watch sectors (use --watch-config or --watch-sectors)",
+                file=sys.stderr,
+            )
             sector_names = []
 
         if not stock_watch:
-            print("[a-share] 5m mode requires watch stocks (use --watch-config or --watch-stocks)", file=sys.stderr)
+            print(
+                "[a-share] 5m mode requires watch stocks (use --watch-config or --watch-stocks)",
+                file=sys.stderr,
+            )
             stock_watch = []
 
         tasks = {}
@@ -902,10 +950,16 @@ def main(
 
         snapshot_df = results.get("snapshot", pd.DataFrame())
         stocks, changes, skipped = _parse_stock_changes(snapshot_df)
-        breadth = DEFAULT_BREADTH.copy() if skip_breadth else _compute_market_breadth_from_changes(changes, skipped)
+        breadth = (
+            DEFAULT_BREADTH.copy()
+            if skip_breadth
+            else _compute_market_breadth_from_changes(changes, skipped)
+        )
 
         regime = compute_market_regime(results.get("indices", []), breadth)
-        sector_watchlist = extract_watch_sectors(results.get("concept_all", []), sector_names)
+        sector_watchlist = extract_watch_sectors(
+            results.get("concept_all", []), sector_names
+        )
         stock_watchlist = extract_watch_stocks(snapshot_df, stock_watch)
         alerts = build_5m_alerts(regime, sector_watchlist, stock_watchlist)
 

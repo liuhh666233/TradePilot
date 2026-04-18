@@ -20,15 +20,12 @@ from tradepilot.ingestion.models import (
     TriggerMode,
 )
 
-
 _STOCK_DAILY_COLS = "stock_code, date, open, high, low, close, volume, amount, turnover"
 _STOCK_WEEKLY_COLS = _STOCK_DAILY_COLS
 _STOCK_MONTHLY_COLS = _STOCK_DAILY_COLS
 _INDEX_DAILY_COLS = "index_code, date, open, high, low, close, volume, amount"
 _TRADING_CALENDAR_COLS = "exchange, trade_date, is_open, pretrade_date"
-_MARKET_DAILY_STATS_COLS = (
-    "trade_date, market_code, market_name, listed_count, total_share, float_share, total_mv, float_mv, amount, vol, trans_count, pe, turnover_rate"
-)
+_MARKET_DAILY_STATS_COLS = "trade_date, market_code, market_name, listed_count, total_share, float_share, total_mv, float_mv, amount, vol, trans_count, pe, turnover_rate"
 _TUSHARE_MAX_SYNC_DAYS = 31
 
 
@@ -133,7 +130,9 @@ class IngestionService:
     def get_runs(self) -> list[dict]:
         """Return ingestion run history."""
         conn = get_conn()
-        rows = conn.execute("SELECT * FROM ingestion_runs ORDER BY started_at DESC").fetchdf()
+        rows = conn.execute(
+            "SELECT * FROM ingestion_runs ORDER BY started_at DESC"
+        ).fetchdf()
         return rows.to_dict(orient="records")
 
     def get_status(self) -> dict:
@@ -150,26 +149,46 @@ class IngestionService:
 
         stock_codes = request.stock_codes
         index_codes = request.index_codes
-        if DATA_PROVIDER != DataProviderType.MOCK and not stock_codes and not index_codes:
-            raise ValueError("stock_codes or index_codes is required when DATA_PROVIDER is not MOCK")
+        if (
+            DATA_PROVIDER != DataProviderType.MOCK
+            and not stock_codes
+            and not index_codes
+        ):
+            raise ValueError(
+                "stock_codes or index_codes is required when DATA_PROVIDER is not MOCK"
+            )
 
         inserted = 0
         for stock_code in stock_codes:
-            daily_df = provider.get_stock_daily(stock_code, request.start_date, request.end_date)
-            weekly_df = provider.get_stock_weekly(stock_code, request.start_date, request.end_date)
-            monthly_df = provider.get_stock_monthly(stock_code, request.start_date, request.end_date)
+            daily_df = provider.get_stock_daily(
+                stock_code, request.start_date, request.end_date
+            )
+            weekly_df = provider.get_stock_weekly(
+                stock_code, request.start_date, request.end_date
+            )
+            monthly_df = provider.get_stock_monthly(
+                stock_code, request.start_date, request.end_date
+            )
 
             _insert_df(conn, "stock_daily", _STOCK_DAILY_COLS, "tmp_daily", daily_df)
-            _insert_df(conn, "stock_weekly", _STOCK_WEEKLY_COLS, "tmp_weekly", weekly_df)
-            _insert_df(conn, "stock_monthly", _STOCK_MONTHLY_COLS, "tmp_monthly", monthly_df)
+            _insert_df(
+                conn, "stock_weekly", _STOCK_WEEKLY_COLS, "tmp_weekly", weekly_df
+            )
+            _insert_df(
+                conn, "stock_monthly", _STOCK_MONTHLY_COLS, "tmp_monthly", monthly_df
+            )
             inserted += len(daily_df) + len(weekly_df) + len(monthly_df)
 
         for index_code in index_codes:
-            index_df = provider.get_index_daily(index_code, request.start_date, request.end_date)
+            index_df = provider.get_index_daily(
+                index_code, request.start_date, request.end_date
+            )
             _insert_df(conn, "index_daily", _INDEX_DAILY_COLS, "tmp_index", index_df)
             inserted += len(index_df)
 
-        inserted += self._sync_tushare_supplement(conn, request.start_date, request.end_date)
+        inserted += self._sync_tushare_supplement(
+            conn, request.start_date, request.end_date
+        )
 
         return inserted
 
@@ -179,15 +198,29 @@ class IngestionService:
         start = date_cls.fromisoformat(start_date)
         end = date_cls.fromisoformat(end_date)
         if (end - start).days > _TUSHARE_MAX_SYNC_DAYS:
-            raise ValueError(f"tushare supplemental sync range exceeds {_TUSHARE_MAX_SYNC_DAYS} days")
+            raise ValueError(
+                f"tushare supplemental sync range exceeds {_TUSHARE_MAX_SYNC_DAYS} days"
+            )
         inserted = 0
         calendar_df = self._tushare.get_trade_calendar(start_date, end_date)
         if not calendar_df.empty:
-            _insert_df(conn, "trading_calendar", _TRADING_CALENDAR_COLS, "tmp_trade_calendar", calendar_df)
+            _insert_df(
+                conn,
+                "trading_calendar",
+                _TRADING_CALENDAR_COLS,
+                "tmp_trade_calendar",
+                calendar_df,
+            )
             inserted += len(calendar_df)
         stats_df = self._tushare.get_market_daily_stats(start_date, end_date)
         if not stats_df.empty:
-            _insert_df(conn, "market_daily_stats", _MARKET_DAILY_STATS_COLS, "tmp_market_daily_stats", stats_df)
+            _insert_df(
+                conn,
+                "market_daily_stats",
+                _MARKET_DAILY_STATS_COLS,
+                "tmp_market_daily_stats",
+                stats_df,
+            )
             inserted += len(stats_df)
         return inserted
 

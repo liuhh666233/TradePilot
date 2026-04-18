@@ -16,6 +16,7 @@ async def lifespan(app: FastAPI):
     yield
     stop_scheduler()
 
+
 app = FastAPI(title="TradePilot", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
@@ -40,4 +41,5 @@ def health():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("tradepilot.main:app", host="0.0.0.0", port=8000, reload=True)
