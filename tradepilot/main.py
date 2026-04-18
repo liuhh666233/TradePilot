@@ -4,7 +4,7 @@ from importlib import import_module
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from tradepilot.api import briefing, collector, portfolio, summary, workflow
+from tradepilot.api import briefing, collector, etf_all_weather, portfolio, summary, workflow
 from tradepilot.scheduler.engine import start_scheduler, stop_scheduler
 
 scheduler_api = import_module("tradepilot.api.scheduler_api")
@@ -31,6 +31,7 @@ app.include_router(collector.router, prefix="/api/collector", tags=["collector"]
 app.include_router(briefing.router, prefix="/api/briefing", tags=["briefing"])
 app.include_router(workflow.router, prefix="/api/workflow", tags=["workflow"])
 app.include_router(scheduler_api.router, prefix="/api/scheduler", tags=["scheduler"])
+app.include_router(etf_all_weather.router, prefix="/api/etf-all-weather", tags=["etf-all-weather"])
 
 
 @app.get("/api/health")

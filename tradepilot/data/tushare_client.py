@@ -27,6 +27,23 @@ _MARKET_DAILY_STATS_COLUMNS = (
     "pe",
     "turnover_rate",
 )
+_FUND_DAILY_COLUMNS = (
+    "ts_code",
+    "trade_date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "vol",
+    "amount",
+    "pct_chg",
+)
+_FUND_ADJ_COLUMNS = ("ts_code", "trade_date", "adj_factor")
+_CN_PMI_COLUMNS = ("month", "pmi")
+_CN_PPI_COLUMNS = ("month", "ppi_yoy")
+_CN_M_COLUMNS = ("month", "m1_yoy", "m2_yoy")
+_SF_MONTH_COLUMNS = ("month", "tsf_yoy")
+_YC_CB_COLUMNS = ("curve_term", "workTime", "yield")
 
 
 def _empty_frame(columns: tuple[str, ...]) -> pd.DataFrame:
@@ -245,6 +262,98 @@ class TushareClient:
         )
         weekly = weekly.dropna(subset=["stock_code", "open", "high", "low", "close"])
         return weekly
+
+    def get_fund_daily(self, fund_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """Return daily fund quotes from Tushare fund_daily."""
+
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns(*_FUND_DAILY_COLUMNS)
+        daily = pro.fund_daily(
+            ts_code=_with_exchange_suffix(fund_code, kind="fund"),
+            start_date=_to_tushare_date(start_date),
+            end_date=_to_tushare_date(end_date),
+            fields=",".join(_FUND_DAILY_COLUMNS),
+        )
+        if daily.empty:
+            return _empty_with_columns(*_FUND_DAILY_COLUMNS)
+        return daily.sort_values("trade_date").reset_index(drop=True)
+
+    def get_fund_adj(self, fund_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """Return fund adjustment factors from Tushare fund_adj."""
+
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns(*_FUND_ADJ_COLUMNS)
+        adj = pro.fund_adj(
+            ts_code=_with_exchange_suffix(fund_code, kind="fund"),
+            start_date=_to_tushare_date(start_date),
+            end_date=_to_tushare_date(end_date),
+            fields=",".join(_FUND_ADJ_COLUMNS),
+        )
+        if adj.empty:
+            return _empty_with_columns(*_FUND_ADJ_COLUMNS)
+        return adj.sort_values("trade_date").reset_index(drop=True)
+
+    def get_cn_pmi(self, start_month: str, end_month: str) -> pd.DataFrame:
+        """Return China PMI data from Tushare."""
+
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns(*_CN_PMI_COLUMNS)
+        frame = pro.cn_pmi(start_m=start_month, end_m=end_month)
+        if frame.empty:
+            return _empty_with_columns(*_CN_PMI_COLUMNS)
+        return frame.sort_values("month").reset_index(drop=True)
+
+    def get_cn_ppi(self, start_month: str, end_month: str) -> pd.DataFrame:
+        """Return China PPI data from Tushare."""
+
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns(*_CN_PPI_COLUMNS)
+        frame = pro.cn_ppi(start_m=start_month, end_m=end_month)
+        if frame.empty:
+            return _empty_with_columns(*_CN_PPI_COLUMNS)
+        return frame.sort_values("month").reset_index(drop=True)
+
+    def get_cn_money_supply(self, start_month: str, end_month: str) -> pd.DataFrame:
+        """Return China money-supply data from Tushare."""
+
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns(*_CN_M_COLUMNS)
+        frame = pro.cn_m(start_m=start_month, end_m=end_month)
+        if frame.empty:
+            return _empty_with_columns(*_CN_M_COLUMNS)
+        return frame.sort_values("month").reset_index(drop=True)
+
+    def get_sf_month(self, start_month: str, end_month: str) -> pd.DataFrame:
+        """Return monthly social-financing data from Tushare."""
+
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns(*_SF_MONTH_COLUMNS)
+        frame = pro.sf_month(start_m=start_month, end_m=end_month)
+        if frame.empty:
+            return _empty_with_columns(*_SF_MONTH_COLUMNS)
+        return frame.sort_values("month").reset_index(drop=True)
+
+    def get_yc_cb(self, ts_code: str, start_date: str, end_date: str, curve_type: str = "0") -> pd.DataFrame:
+        """Return ChinaBond curve points from Tushare yc_cb."""
+
+        pro = self._pro
+        if pro is None:
+            return _empty_with_columns(*_YC_CB_COLUMNS)
+        frame = pro.yc_cb(
+            ts_code=ts_code,
+            curve_type=curve_type,
+            start_date=_to_tushare_date(start_date),
+            end_date=_to_tushare_date(end_date),
+        )
+        if frame.empty:
+            return _empty_with_columns(*_YC_CB_COLUMNS)
+        return frame.sort_values(["workTime", "curve_term"]).reset_index(drop=True)
 
     def get_stock_monthly(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         daily = self.get_stock_daily(stock_code, start_date, end_date)

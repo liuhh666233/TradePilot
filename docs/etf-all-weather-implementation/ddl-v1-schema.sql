@@ -131,7 +131,7 @@ CREATE INDEX IF NOT EXISTS idx_etf_aw_validation_results_run_dataset
 CREATE INDEX IF NOT EXISTS idx_canonical_sleeves_role
     ON canonical_sleeves (sleeve_role);
 
-INSERT INTO canonical_sleeves (
+INSERT OR REPLACE INTO canonical_sleeves (
     sleeve_code,
     sleeve_role,
     sleeve_name,
@@ -190,15 +190,7 @@ INSERT INTO canonical_sleeves (
         NULL,
         'Canonical v1 cash or neutral buffer sleeve.',
         TRUE
-    )
-ON CONFLICT (sleeve_code) DO UPDATE SET
-    sleeve_role = EXCLUDED.sleeve_role,
-    sleeve_name = EXCLUDED.sleeve_name,
-    listing_exchange = EXCLUDED.listing_exchange,
-    benchmark_name = EXCLUDED.benchmark_name,
-    exposure_note = EXCLUDED.exposure_note,
-    is_active = EXCLUDED.is_active,
-    updated_at = now();
+    );
 
 -- Optional future query surfaces for Parquet-backed normalized facts.
 -- Create these views only after the matching partitions exist.

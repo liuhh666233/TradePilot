@@ -38,6 +38,7 @@ class DataProviderType(StrEnum):
 DB_PATH = Path(__file__).parent.parent / "data" / "tradepilot.duckdb"
 DATA_PROVIDER = DataProviderType.TUSHARE
 DATA_ROOT = Path(__file__).parent.parent / "data"
+ETF_AW_DATA_ROOT = DATA_ROOT / "etf_all_weather"
 BILIBILI_STORAGE_PATH = DATA_ROOT / "bilibili"
 RESEARCH_REPORT_ROOT = Path(_env("RESEARCH_REPORT_ROOT", "/Volumes/Data/research_report") or "/Volumes/Data/research_report")
 TUSHARE_TOKEN: str | None = _env("TUSHARE_TOKEN")
