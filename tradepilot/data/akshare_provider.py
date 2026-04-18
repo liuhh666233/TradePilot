@@ -78,25 +78,45 @@ class AKShareProvider(DataProvider):
             time.sleep(_REQUEST_PAUSE)
             stocks = ak.stock_zh_a_spot_em()
             normalized = stocks.rename(columns={"代码": "code", "名称": "name"}).copy()
-            normalized = cast(pd.DataFrame, normalized.loc[:, ["code", "name"]].drop_duplicates().reset_index(drop=True))
+            normalized = cast(
+                pd.DataFrame,
+                normalized.loc[:, ["code", "name"]]
+                .drop_duplicates()
+                .reset_index(drop=True),
+            )
             return sanitize_for_json(normalized)
         except Exception as exc:
             logger.exception("akshare: stock catalog failed, using fallback")
-            return self._fallback_or_raise(exc, "stock catalog", self._tushare.get_stock_catalog)
+            return self._fallback_or_raise(
+                exc, "stock catalog", self._tushare.get_stock_catalog
+            )
 
     def get_index_catalog(self) -> pd.DataFrame:
         try:
             time.sleep(_REQUEST_PAUSE)
             indices = ak.index_stock_info()
-            normalized = indices.rename(columns={"index_code": "code", "display_name": "name"}).copy()
-            normalized = cast(pd.DataFrame, normalized.loc[:, ["code", "name"]].drop_duplicates().reset_index(drop=True))
+            normalized = indices.rename(
+                columns={"index_code": "code", "display_name": "name"}
+            ).copy()
+            normalized = cast(
+                pd.DataFrame,
+                normalized.loc[:, ["code", "name"]]
+                .drop_duplicates()
+                .reset_index(drop=True),
+            )
             return sanitize_for_json(normalized)
         except Exception as exc:
             logger.exception("akshare: index catalog failed, using fallback")
-            return self._fallback_or_raise(exc, "index catalog", self._tushare.get_index_catalog)
+            return self._fallback_or_raise(
+                exc, "index catalog", self._tushare.get_index_catalog
+            )
 
     def _fallback_or_raise(self, exc: Exception, label: str, fallback) -> pd.DataFrame:
-        if AKSHARE_TUSHARE_FALLBACK_ENABLED and self._tushare.enabled and fallback is not None:
+        if (
+            AKSHARE_TUSHARE_FALLBACK_ENABLED
+            and self._tushare.enabled
+            and fallback is not None
+        ):
             try:
                 result = fallback()
             except Exception:
@@ -106,7 +126,9 @@ class AKShareProvider(DataProvider):
                     logger.warning("using tushare fallback for {}", label)
                     return sanitize_for_json(result)
                 logger.warning("tushare fallback returned empty data for {}", label)
-        raise RuntimeError(f"failed to fetch {label} from configured real data sources") from exc
+        raise RuntimeError(
+            f"failed to fetch {label} from configured real data sources"
+        ) from exc
 
     # ------------------------------------------------------------------
     # Stock OHLCV (daily / weekly / monthly)
@@ -127,15 +149,31 @@ class AKShareProvider(DataProvider):
             )
             df = df.rename(columns=_STOCK_HIST_RENAME)
             # Keep only columns our schema needs
-            keep = ["date", "stock_code", "open", "high", "low", "close", "volume", "amount", "turnover"]
+            keep = [
+                "date",
+                "stock_code",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "amount",
+                "turnover",
+            ]
             df = cast(pd.DataFrame, df[[c for c in keep if c in df.columns]])
             if "stock_code" not in df.columns:
                 df["stock_code"] = stock_code
             df["date"] = pd.to_datetime(df["date"], errors="coerce")
-            logger.debug("akshare: fetched {} {} rows for {}", period, len(df), stock_code)
+            logger.debug(
+                "akshare: fetched {} {} rows for {}", period, len(df), stock_code
+            )
             return sanitize_for_json(df)
         except Exception as exc:
-            logger.exception("akshare: stock_zh_a_hist({}, {}) failed, using fallback", stock_code, period)
+            logger.exception(
+                "akshare: stock_zh_a_hist({}, {}) failed, using fallback",
+                stock_code,
+                period,
+            )
             fallback_fn = {
                 "daily": self._tushare.get_stock_daily,
                 "weekly": self._tushare.get_stock_weekly,
@@ -147,15 +185,21 @@ class AKShareProvider(DataProvider):
                 lambda: fallback_fn(stock_code, start_date, end_date),
             )
 
-    def get_stock_daily(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_stock_daily(
+        self, stock_code: str, start_date: str, end_date: str
+    ) -> pd.DataFrame:
         """Return daily OHLCV data for a stock."""
         return self._fetch_stock_hist(stock_code, "daily", start_date, end_date)
 
-    def get_stock_weekly(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_stock_weekly(
+        self, stock_code: str, start_date: str, end_date: str
+    ) -> pd.DataFrame:
         """Return weekly OHLCV data for a stock."""
         return self._fetch_stock_hist(stock_code, "weekly", start_date, end_date)
 
-    def get_stock_monthly(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_stock_monthly(
+        self, stock_code: str, start_date: str, end_date: str
+    ) -> pd.DataFrame:
         """Return monthly OHLCV data for a stock."""
         return self._fetch_stock_hist(stock_code, "monthly", start_date, end_date)
 
@@ -163,7 +207,9 @@ class AKShareProvider(DataProvider):
     # Index daily
     # ------------------------------------------------------------------
 
-    def get_index_daily(self, index_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_index_daily(
+        self, index_code: str, start_date: str, end_date: str
+    ) -> pd.DataFrame:
         """Return daily OHLCV data for an index."""
         try:
             time.sleep(_REQUEST_PAUSE)
@@ -178,10 +224,14 @@ class AKShareProvider(DataProvider):
             df = cast(pd.DataFrame, df[[c for c in keep if c in df.columns]])
             df["index_code"] = index_code
             df["date"] = pd.to_datetime(df["date"], errors="coerce")
-            logger.debug("akshare: fetched index daily {} rows for {}", len(df), index_code)
+            logger.debug(
+                "akshare: fetched index daily {} rows for {}", len(df), index_code
+            )
             return sanitize_for_json(df)
         except Exception as exc:
-            logger.exception("akshare: index_zh_a_hist({}) failed, using fallback", index_code)
+            logger.exception(
+                "akshare: index_zh_a_hist({}) failed, using fallback", index_code
+            )
             return self._fallback_or_raise(
                 exc,
                 f"index daily history for {index_code}",
@@ -192,7 +242,9 @@ class AKShareProvider(DataProvider):
     # ETF flow
     # ------------------------------------------------------------------
 
-    def get_etf_flow(self, etf_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_etf_flow(
+        self, etf_code: str, start_date: str, end_date: str
+    ) -> pd.DataFrame:
         """Return ETF fund flow data.
 
         Uses individual stock fund flow API treating the ETF as a tradable
@@ -203,11 +255,13 @@ class AKShareProvider(DataProvider):
             # Determine market prefix for akshare
             market = "sh" if etf_code.startswith(("5", "6")) else "sz"
             df = ak.stock_individual_fund_flow(stock=etf_code, market=market)
-            df = df.rename(columns={
-                "日期": "date",
-                "主力净流入-净额": "net_inflow",
-                "收盘价": "close",
-            })
+            df = df.rename(
+                columns={
+                    "日期": "date",
+                    "主力净流入-净额": "net_inflow",
+                    "收盘价": "close",
+                }
+            )
             df["etf_code"] = etf_code
             df["date"] = pd.to_datetime(df["date"], errors="coerce")
             # Filter to date range
@@ -223,7 +277,9 @@ class AKShareProvider(DataProvider):
             return sanitize_for_json(df)
         except Exception as exc:
             logger.exception("akshare: etf flow({}) failed, using fallback", etf_code)
-            raise RuntimeError(f"failed to fetch etf flow for {etf_code} from configured real data sources") from exc
+            raise RuntimeError(
+                f"failed to fetch etf flow for {etf_code} from configured real data sources"
+            ) from exc
 
     # ------------------------------------------------------------------
     # Margin data
@@ -238,8 +294,12 @@ class AKShareProvider(DataProvider):
         """
         logger.debug("akshare: margin_data delegates to tushare fallback")
         if AKSHARE_TUSHARE_FALLBACK_ENABLED and self._tushare.enabled:
-            return sanitize_for_json(self._tushare.get_margin_data(start_date, end_date))
-        raise RuntimeError("failed to fetch margin data from configured real data sources")
+            return sanitize_for_json(
+                self._tushare.get_margin_data(start_date, end_date)
+            )
+        raise RuntimeError(
+            "failed to fetch margin data from configured real data sources"
+        )
 
     # ------------------------------------------------------------------
     # Northbound flow
@@ -276,7 +336,9 @@ class AKShareProvider(DataProvider):
     # Stock valuation
     # ------------------------------------------------------------------
 
-    def get_stock_valuation(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_stock_valuation(
+        self, stock_code: str, start_date: str, end_date: str
+    ) -> pd.DataFrame:
         """Return valuation data for a stock.
 
         Fetches PE-TTM, PB, and market cap from Baidu Finance via akshare.
@@ -299,24 +361,37 @@ class AKShareProvider(DataProvider):
                 if merged is None:
                     merged = cast(pd.DataFrame, df)
                 else:
-                    merged = cast(pd.DataFrame, merged.merge(df, on="date", how="outer"))
+                    merged = cast(
+                        pd.DataFrame, merged.merge(df, on="date", how="outer")
+                    )
             if merged is None or merged.empty:
                 raise ValueError("no valuation data returned")
             merged["stock_code"] = stock_code
             merged["ps"] = None
             start = pd.to_datetime(start_date)
             end = pd.to_datetime(end_date)
-            merged = cast(pd.DataFrame, merged[(merged["date"] >= start) & (merged["date"] <= end)])
+            merged = cast(
+                pd.DataFrame,
+                merged[(merged["date"] >= start) & (merged["date"] <= end)],
+            )
             keep = ["stock_code", "date", "pe_ttm", "pb", "ps", "market_cap"]
-            merged = cast(pd.DataFrame, merged[[c for c in keep if c in merged.columns]])
-            logger.debug("akshare: fetched valuation {} rows for {}", len(merged), stock_code)
+            merged = cast(
+                pd.DataFrame, merged[[c for c in keep if c in merged.columns]]
+            )
+            logger.debug(
+                "akshare: fetched valuation {} rows for {}", len(merged), stock_code
+            )
             return sanitize_for_json(merged)
         except Exception as exc:
-            logger.exception("akshare: valuation({}) failed, using fallback", stock_code)
+            logger.exception(
+                "akshare: valuation({}) failed, using fallback", stock_code
+            )
             return self._fallback_or_raise(
                 exc,
                 f"stock valuation for {stock_code}",
-                lambda: self._tushare.get_stock_valuation(stock_code, start_date, end_date),
+                lambda: self._tushare.get_stock_valuation(
+                    stock_code, start_date, end_date
+                ),
             )
 
     # ------------------------------------------------------------------
@@ -331,31 +406,45 @@ class AKShareProvider(DataProvider):
         for historical multi-day ranges.
         """
         logger.debug("akshare: sector_data real fallback unavailable")
-        raise RuntimeError("failed to fetch sector data from configured real data sources")
+        raise RuntimeError(
+            "failed to fetch sector data from configured real data sources"
+        )
 
     # ------------------------------------------------------------------
     # Sector ↔ stock mapping
     # ------------------------------------------------------------------
 
-    def get_sector_stocks(self, sector: str, as_of_date: str | None = None) -> pd.DataFrame:
+    def get_sector_stocks(
+        self, sector: str, as_of_date: str | None = None
+    ) -> pd.DataFrame:
         """Return stock members for a sector (industry board)."""
         try:
             time.sleep(_REQUEST_PAUSE)
             df = ak.stock_board_industry_cons_em(symbol=sector)
             df = df.rename(columns=_SECTOR_CONS_RENAME)
-            result = pd.DataFrame({
-                "sector": sector,
-                "stock_code": df["stock_code"],
-                "stock_name": df["stock_name"],
-                "as_of_date": as_of_date,
-            })
-            logger.debug("akshare: fetched sector stocks {} rows for {}", len(result), sector)
+            result = pd.DataFrame(
+                {
+                    "sector": sector,
+                    "stock_code": df["stock_code"],
+                    "stock_name": df["stock_name"],
+                    "as_of_date": as_of_date,
+                }
+            )
+            logger.debug(
+                "akshare: fetched sector stocks {} rows for {}", len(result), sector
+            )
             return sanitize_for_json(result)
         except Exception as exc:
-            logger.exception("akshare: sector_stocks({}) failed, using fallback", sector)
-            raise RuntimeError(f"failed to fetch sector stocks for {sector} from configured real data sources") from exc
+            logger.exception(
+                "akshare: sector_stocks({}) failed, using fallback", sector
+            )
+            raise RuntimeError(
+                f"failed to fetch sector stocks for {sector} from configured real data sources"
+            ) from exc
 
-    def get_stock_sector(self, stock_code: str, as_of_date: str | None = None) -> pd.DataFrame:
+    def get_stock_sector(
+        self, stock_code: str, as_of_date: str | None = None
+    ) -> pd.DataFrame:
         """Return sector mappings for a stock.
 
         Iterates the industry board list to find boards containing the stock.
@@ -382,10 +471,17 @@ class AKShareProvider(DataProvider):
             if not matches:
                 raise ValueError(f"no sector found for {stock_code}")
             result = pd.DataFrame(
-                [{"stock_code": stock_code, "sector": s, "as_of_date": as_of_date} for s in matches]
+                [
+                    {"stock_code": stock_code, "sector": s, "as_of_date": as_of_date}
+                    for s in matches
+                ]
             )
             logger.debug("akshare: found {} sectors for {}", len(matches), stock_code)
             return sanitize_for_json(result)
         except Exception as exc:
-            logger.exception("akshare: stock_sector({}) failed, using fallback", stock_code)
-            raise RuntimeError(f"failed to fetch stock sector for {stock_code} from configured real data sources") from exc
+            logger.exception(
+                "akshare: stock_sector({}) failed, using fallback", stock_code
+            )
+            raise RuntimeError(
+                f"failed to fetch stock sector for {stock_code} from configured real data sources"
+            ) from exc

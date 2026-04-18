@@ -44,8 +44,14 @@ TARGET_INDICES: list[tuple[str, str]] = [
 ]
 
 _DEFAULT_BREADTH = MarketBreadth(
-    total=0, up=0, down=0, flat=0,
-    limit_up=0, limit_up_20=0, limit_down=0, limit_down_20=0,
+    total=0,
+    up=0,
+    down=0,
+    flat=0,
+    limit_up=0,
+    limit_up_20=0,
+    limit_down=0,
+    limit_down_20=0,
 )
 
 # Trading session windows (inclusive)
@@ -117,10 +123,16 @@ def _clip(value: float, lower: float, upper: float) -> float:
 
 def _fetch_indices() -> list[IndexSnapshot]:
     """Fetch major index snapshots from East Money / Sina."""
+
     def _default(code: str, name: str) -> IndexSnapshot:
         return IndexSnapshot(
-            code=code, name=name, close=0.0,
-            change_pct=0.0, change_val=0.0, volume=0.0, turnover=0.0,
+            code=code,
+            name=name,
+            close=0.0,
+            change_pct=0.0,
+            change_val=0.0,
+            volume=0.0,
+            turnover=0.0,
         )
 
     em_df: pd.DataFrame | None = None
@@ -158,28 +170,32 @@ def _fetch_indices() -> list[IndexSnapshot]:
     for code, name in TARGET_INDICES:
         row = em_code_map.get(code) or em_name_map.get(name)
         if row is not None:
-            results.append(IndexSnapshot(
-                code=_normalize_code(row.get("代码")) or code,
-                name=_safe_str(row.get("名称")) or name,
-                close=_safe_float(row.get("最新价")),
-                change_pct=_safe_float(row.get("涨跌幅")),
-                change_val=_safe_float(row.get("涨跌额")),
-                volume=_safe_float(row.get("成交量")),
-                turnover=_safe_float(row.get("成交额")),
-            ))
+            results.append(
+                IndexSnapshot(
+                    code=_normalize_code(row.get("代码")) or code,
+                    name=_safe_str(row.get("名称")) or name,
+                    close=_safe_float(row.get("最新价")),
+                    change_pct=_safe_float(row.get("涨跌幅")),
+                    change_val=_safe_float(row.get("涨跌额")),
+                    volume=_safe_float(row.get("成交量")),
+                    turnover=_safe_float(row.get("成交额")),
+                )
+            )
             continue
 
         row = sina_code_map.get(code) or sina_name_map.get(name)
         if row is not None:
-            results.append(IndexSnapshot(
-                code=_normalize_code(row.get("代码")) or code,
-                name=_safe_str(row.get("名称")) or name,
-                close=_safe_float(row.get("最新价")),
-                change_pct=_safe_float(row.get("涨跌幅")),
-                change_val=_safe_float(row.get("涨跌额")),
-                volume=_safe_float(row.get("成交量")),
-                turnover=_safe_float(row.get("成交额")),
-            ))
+            results.append(
+                IndexSnapshot(
+                    code=_normalize_code(row.get("代码")) or code,
+                    name=_safe_str(row.get("名称")) or name,
+                    close=_safe_float(row.get("最新价")),
+                    change_pct=_safe_float(row.get("涨跌幅")),
+                    change_val=_safe_float(row.get("涨跌额")),
+                    volume=_safe_float(row.get("成交量")),
+                    turnover=_safe_float(row.get("成交额")),
+                )
+            )
             continue
 
         results.append(_default(code, name))
@@ -202,14 +218,16 @@ def _fetch_sectors(
         )
         records: list[dict] = []
         for _, row in df.iterrows():
-            records.append({
-                "code": _safe_str(row.get("板块代码")),
-                "name": _safe_str(row.get("板块名称")),
-                "change_pct": _safe_float(row.get("涨跌幅")),
-                "up_count": _safe_int(row.get("上涨家数")),
-                "down_count": _safe_int(row.get("下跌家数")),
-                "leader": _safe_str(row.get("领涨股票")),
-            })
+            records.append(
+                {
+                    "code": _safe_str(row.get("板块代码")),
+                    "name": _safe_str(row.get("板块名称")),
+                    "change_pct": _safe_float(row.get("涨跌幅")),
+                    "up_count": _safe_int(row.get("上涨家数")),
+                    "down_count": _safe_int(row.get("下跌家数")),
+                    "leader": _safe_str(row.get("领涨股票")),
+                }
+            )
         records.sort(key=lambda x: x["change_pct"], reverse=not ascending)
         return [SectorRecord(**r) for r in records[:top_n]]
     except Exception as exc:
@@ -260,7 +278,9 @@ def _fetch_sectors(
         daily_df = pro.ths_daily(trade_date=trade_date)
         if not index_frames or daily_df.empty:
             return []
-        index_df = pd.concat(index_frames, ignore_index=True).drop_duplicates(subset=["ts_code"], keep="first")
+        index_df = pd.concat(index_frames, ignore_index=True).drop_duplicates(
+            subset=["ts_code"], keep="first"
+        )
         merged = daily_df.merge(index_df[["ts_code", "name"]], on="ts_code", how="left")
         merged = merged.sort_values("pct_change", ascending=ascending).head(top_n)
         records = [
@@ -299,11 +319,13 @@ def _parse_stock_changes(
             skipped += 1
             continue
 
-        stocks.append({
-            "code": _normalize_code(row.get("代码")),
-            "name": _safe_str(row.get("名称")),
-            "change_pct": change,
-        })
+        stocks.append(
+            {
+                "code": _normalize_code(row.get("代码")),
+                "name": _safe_str(row.get("名称")),
+                "change_pct": change,
+            }
+        )
         changes.append(change)
 
     return stocks, changes, skipped
@@ -350,12 +372,13 @@ def _compute_market_regime(
     total = breadth.total
     breadth_component = ((breadth.up - breadth.down) / total * 100) if total else 0.0
     limit_component = (
-        (breadth.limit_up - breadth.limit_down) / total * 1000
-    ) if total else 0.0
+        ((breadth.limit_up - breadth.limit_down) / total * 1000) if total else 0.0
+    )
 
     score = _clip(
         index_component * 0.4 + breadth_component * 0.4 + limit_component * 0.2,
-        -100.0, 100.0,
+        -100.0,
+        100.0,
     )
 
     if score >= 20:
@@ -378,7 +401,8 @@ def _compute_market_regime(
 
 
 def _find_sector_match(
-    concepts: list[SectorRecord], watch_name: str,
+    concepts: list[SectorRecord],
+    watch_name: str,
 ) -> SectorRecord | None:
     """Find watch sector by exact or fuzzy name match."""
     watch_lower = watch_name.lower()
@@ -392,7 +416,8 @@ def _find_sector_match(
 
 
 def _extract_watch_sectors(
-    concepts: list[SectorRecord], watch_names: list[str],
+    concepts: list[SectorRecord],
+    watch_names: list[str],
 ) -> list[WatchSectorRecord]:
     """Extract watchlist sector records and classify signal strength."""
     results: list[WatchSectorRecord] = []
@@ -400,10 +425,17 @@ def _extract_watch_sectors(
     for watch_name in watch_names:
         matched = _find_sector_match(concepts, watch_name)
         if matched is None:
-            results.append(WatchSectorRecord(
-                name=watch_name, matched_name="", change_pct=0.0,
-                up_count=0, down_count=0, strength=0.0, status="missing",
-            ))
+            results.append(
+                WatchSectorRecord(
+                    name=watch_name,
+                    matched_name="",
+                    change_pct=0.0,
+                    up_count=0,
+                    down_count=0,
+                    strength=0.0,
+                    status="missing",
+                )
+            )
             continue
 
         total = matched.up_count + matched.down_count
@@ -415,26 +447,28 @@ def _extract_watch_sectors(
         elif matched.change_pct <= -2.0 and strength <= 0.4:
             status = "weak"
 
-        results.append(WatchSectorRecord(
-            name=watch_name,
-            matched_name=matched.name,
-            change_pct=round(matched.change_pct, 2),
-            up_count=matched.up_count,
-            down_count=matched.down_count,
-            strength=round(strength, 2),
-            status=status,
-        ))
+        results.append(
+            WatchSectorRecord(
+                name=watch_name,
+                matched_name=matched.name,
+                change_pct=round(matched.change_pct, 2),
+                up_count=matched.up_count,
+                down_count=matched.down_count,
+                strength=round(strength, 2),
+                status=status,
+            )
+        )
 
     return results
 
 
 def _extract_watch_stocks(
-    snapshot_df: pd.DataFrame, watch_stocks: list[dict],
+    snapshot_df: pd.DataFrame,
+    watch_stocks: list[dict],
 ) -> list[WatchStockRecord]:
     """Extract watchlist stock records and classify signal status."""
     code_map: dict[str, pd.Series] = {
-        _normalize_code(row.get("代码")): row
-        for _, row in snapshot_df.iterrows()
+        _normalize_code(row.get("代码")): row for _, row in snapshot_df.iterrows()
     }
 
     results: list[WatchStockRecord] = []
@@ -444,11 +478,18 @@ def _extract_watch_stocks(
         row = code_map.get(code)
 
         if row is None:
-            results.append(WatchStockRecord(
-                code=code, name=watch_name, price=0.0, change_pct=0.0,
-                change_val=0.0, turnover_rate=0.0, volume_ratio=0.0,
-                status="missing",
-            ))
+            results.append(
+                WatchStockRecord(
+                    code=code,
+                    name=watch_name,
+                    price=0.0,
+                    change_pct=0.0,
+                    change_val=0.0,
+                    turnover_rate=0.0,
+                    volume_ratio=0.0,
+                    status="missing",
+                )
+            )
             continue
 
         change_pct = _safe_float(row.get("涨跌幅"))
@@ -463,16 +504,18 @@ def _extract_watch_stocks(
         elif abs(change_pct) >= 1.5 and (turnover_rate >= 5.0 or volume_ratio >= 1.5):
             status = "active"
 
-        results.append(WatchStockRecord(
-            code=code,
-            name=_safe_str(row.get("名称")) or watch_name,
-            price=round(_safe_float(row.get("最新价")), 2),
-            change_pct=round(change_pct, 2),
-            change_val=round(_safe_float(row.get("涨跌额")), 2),
-            turnover_rate=round(turnover_rate, 2),
-            volume_ratio=round(volume_ratio, 2),
-            status=status,
-        ))
+        results.append(
+            WatchStockRecord(
+                code=code,
+                name=_safe_str(row.get("名称")) or watch_name,
+                price=round(_safe_float(row.get("最新价")), 2),
+                change_pct=round(change_pct, 2),
+                change_val=round(_safe_float(row.get("涨跌额")), 2),
+                turnover_rate=round(turnover_rate, 2),
+                volume_ratio=round(volume_ratio, 2),
+                status=status,
+            )
+        )
 
     return results
 
@@ -521,7 +564,10 @@ def get_trading_status() -> TradingStatusResponse:
     if weekday >= 5:
         days_until_monday = 7 - weekday
         next_open = (now + timedelta(days=days_until_monday)).replace(
-            hour=9, minute=15, second=0, microsecond=0,
+            hour=9,
+            minute=15,
+            second=0,
+            microsecond=0,
         )
         return TradingStatusResponse(
             is_trading=False,

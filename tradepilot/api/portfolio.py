@@ -34,7 +34,9 @@ class TradeCreate(BaseModel):
 @router.get("/positions")
 def list_positions():
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM portfolio WHERE status = 'open' ORDER BY buy_date DESC").fetchdf()
+    rows = conn.execute(
+        "SELECT * FROM portfolio WHERE status = 'open' ORDER BY buy_date DESC"
+    ).fetchdf()
     return rows.to_dict(orient="records")
 
 
@@ -43,7 +45,14 @@ def add_position(pos: PositionCreate):
     conn = get_conn()
     conn.execute(
         "INSERT INTO portfolio (id, stock_code, stock_name, buy_date, buy_price, quantity) VALUES (?, ?, ?, ?, ?, ?)",
-        [_next_id("portfolio"), pos.stock_code, pos.stock_name, pos.buy_date, pos.buy_price, pos.quantity],
+        [
+            _next_id("portfolio"),
+            pos.stock_code,
+            pos.stock_name,
+            pos.buy_date,
+            pos.buy_price,
+            pos.quantity,
+        ],
     )
     return {"status": "ok"}
 
@@ -67,6 +76,15 @@ def add_trade(trade: TradeCreate):
     conn = get_conn()
     conn.execute(
         "INSERT INTO trades (id, date, stock_code, stock_name, direction, price, quantity, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [_next_id("trades"), trade.date, trade.stock_code, trade.stock_name, trade.direction, trade.price, trade.quantity, trade.reason],
+        [
+            _next_id("trades"),
+            trade.date,
+            trade.stock_code,
+            trade.stock_name,
+            trade.direction,
+            trade.price,
+            trade.quantity,
+            trade.reason,
+        ],
     )
     return {"status": "ok"}

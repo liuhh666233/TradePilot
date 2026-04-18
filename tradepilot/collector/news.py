@@ -24,22 +24,92 @@ _NEWS_HEADERS = {
 
 NEWS_CATEGORIES: dict[str, list[str]] = {
     "macro": [
-        "央行", "国务院", "政策", "降准", "降息", "MLF", "LPR", "逆回购", "财政", "货币", "监管", "证监", "银保监", "发改委", "国常会",
+        "央行",
+        "国务院",
+        "政策",
+        "降准",
+        "降息",
+        "MLF",
+        "LPR",
+        "逆回购",
+        "财政",
+        "货币",
+        "监管",
+        "证监",
+        "银保监",
+        "发改委",
+        "国常会",
     ],
     "company": [
-        "业绩", "减持", "增持", "回购", "分红", "并购", "重组", "定增", "解禁", "股权", "董事", "高管", "年报", "季报", "预增", "预减", "中报",
+        "业绩",
+        "减持",
+        "增持",
+        "回购",
+        "分红",
+        "并购",
+        "重组",
+        "定增",
+        "解禁",
+        "股权",
+        "董事",
+        "高管",
+        "年报",
+        "季报",
+        "预增",
+        "预减",
+        "中报",
     ],
     "industry": [
-        "板块", "产业", "产能", "订单", "出货", "扩产", "供需", "价格上涨", "涨价", "景气", "渗透率", "产业链",
+        "板块",
+        "产业",
+        "产能",
+        "订单",
+        "出货",
+        "扩产",
+        "供需",
+        "价格上涨",
+        "涨价",
+        "景气",
+        "渗透率",
+        "产业链",
     ],
     "geopolitics": [
-        "冲突", "制裁", "关税", "战争", "谈判", "协议", "外交", "军事", "领土", "贸易摩擦", "中美",
+        "冲突",
+        "制裁",
+        "关税",
+        "战争",
+        "谈判",
+        "协议",
+        "外交",
+        "军事",
+        "领土",
+        "贸易摩擦",
+        "中美",
     ],
     "overseas": [
-        "美股", "美联储", "纳斯达克", "标普", "道琼斯", "Fed", "欧央行", "日央行", "外资", "北向", "港股", "恒生",
+        "美股",
+        "美联储",
+        "纳斯达克",
+        "标普",
+        "道琼斯",
+        "Fed",
+        "欧央行",
+        "日央行",
+        "外资",
+        "北向",
+        "港股",
+        "恒生",
     ],
     "technology": [
-        "GitHub", "开源", "AI", "LLM", "GPT", "Agent", "大模型", "机器人", "自动驾驶",
+        "GitHub",
+        "开源",
+        "AI",
+        "LLM",
+        "GPT",
+        "Agent",
+        "大模型",
+        "机器人",
+        "自动驾驶",
     ],
 }
 
@@ -62,7 +132,12 @@ class NewsCollector:
             + self._fetch_eastmoney_kuaixun(limit=30)
             + self._fetch_wallstreetcn(limit=20)
             + self._fetch_36kr(limit=15, keyword="融资,财报,上市,IPO,基金,投资,营收")
-            + self._fetch_hn_algolia(limit=12, keyword="AI,LLM,GPT,Claude,Anthropic,DeepSeek,Agent", min_points=10, days=3)
+            + self._fetch_hn_algolia(
+                limit=12,
+                keyword="AI,LLM,GPT,Claude,Anthropic,DeepSeek,Agent",
+                min_points=10,
+                days=3,
+            )
             + self._fetch_github_trending(limit=10)
         )
         items = self._deduplicate(items)
@@ -75,16 +150,27 @@ class NewsCollector:
     def _fetch_cls_telegraph(self, limit: int = 30) -> list[dict]:
         """Fetch telegraph news from CLS."""
         api = "https://www.cls.cn/nodeapi/updateTelegraphList"
-        params = {"app": "CailianpressWeb", "os": "web", "sv": "7.7.5", "rn": str(limit)}
+        params = {
+            "app": "CailianpressWeb",
+            "os": "web",
+            "sv": "7.7.5",
+            "rn": str(limit),
+        }
         try:
-            data = requests.get(api, params=params, headers=_NEWS_HEADERS, timeout=10).json()
+            data = requests.get(
+                api, params=params, headers=_NEWS_HEADERS, timeout=10
+            ).json()
         except Exception as exc:
             logger.warning("cls telegraph fetch failed: {}", exc)
             return []
 
         items: list[dict] = []
         for roll in data.get("data", {}).get("roll_data", []):
-            title = roll.get("title") or roll.get("brief") or (roll.get("content") or "")[:80]
+            title = (
+                roll.get("title")
+                or roll.get("brief")
+                or (roll.get("content") or "")[:80]
+            )
             if not title:
                 continue
             content = roll.get("content") or roll.get("brief") or title
@@ -107,7 +193,9 @@ class NewsCollector:
                     "source_item_id": item_id,
                     "title": title,
                     "content": content,
-                    "category": self._categorize(title, content, subjects, source="cls_telegraph"),
+                    "category": self._categorize(
+                        title, content, subjects, source="cls_telegraph"
+                    ),
                     "published_at": published_at,
                     "url": share_url or f"https://www.cls.cn/detail/{item_id}",
                     "subjects": subjects,
@@ -128,7 +216,9 @@ class NewsCollector:
             "req_trace": str(int(datetime.now().timestamp() * 1000)),
         }
         try:
-            data = requests.get(api, params=params, headers=_NEWS_HEADERS, timeout=10).json()
+            data = requests.get(
+                api, params=params, headers=_NEWS_HEADERS, timeout=10
+            ).json()
         except Exception as exc:
             logger.warning("eastmoney kuaixun fetch failed: {}", exc)
             return []
@@ -139,7 +229,11 @@ class NewsCollector:
             if not title:
                 continue
             content = article.get("digest", "") or title
-            item_id = str(article.get("code") or article.get("infoCode") or self._hash_id(title, content))
+            item_id = str(
+                article.get("code")
+                or article.get("infoCode")
+                or self._hash_id(title, content)
+            )
             published_at = self._parse_datetime(article.get("showTime"))
             items.append(
                 {
@@ -147,7 +241,9 @@ class NewsCollector:
                     "source_item_id": item_id,
                     "title": title,
                     "content": content,
-                    "category": self._categorize(title, content, source="eastmoney_kuaixun"),
+                    "category": self._categorize(
+                        title, content, source="eastmoney_kuaixun"
+                    ),
                     "published_at": published_at,
                     "url": article.get("uniqueUrl", "") or article.get("url", ""),
                     "subjects": [],
@@ -179,10 +275,16 @@ class NewsCollector:
             items.append(
                 {
                     "source": "wallstreetcn",
-                    "source_item_id": str(resource.get("id") or self._hash_id(title, url or title)),
+                    "source_item_id": str(
+                        resource.get("id") or self._hash_id(title, url or title)
+                    ),
                     "title": title,
                     "content": resource.get("content_short") or title,
-                    "category": self._categorize(title, resource.get("content_short") or title, source="wallstreetcn"),
+                    "category": self._categorize(
+                        title,
+                        resource.get("content_short") or title,
+                        source="wallstreetcn",
+                    ),
                     "published_at": published_at,
                     "url": url,
                     "subjects": [],
@@ -194,7 +296,9 @@ class NewsCollector:
     def _fetch_36kr(self, limit: int = 15, keyword: str | None = None) -> list[dict]:
         """Fetch newsflashes from 36Kr."""
         try:
-            response = requests.get("https://36kr.com/newsflashes", headers=_NEWS_HEADERS, timeout=10)
+            response = requests.get(
+                "https://36kr.com/newsflashes", headers=_NEWS_HEADERS, timeout=10
+            )
             soup = BeautifulSoup(response.text, "html.parser")
         except Exception as exc:
             logger.warning("36kr fetch failed: {}", exc)
@@ -207,11 +311,17 @@ class NewsCollector:
             title = title_element.get_text(strip=True)
             text = title.lower()
             if keyword:
-                keywords = [item.strip().lower() for item in keyword.split(",") if item.strip()]
+                keywords = [
+                    item.strip().lower() for item in keyword.split(",") if item.strip()
+                ]
                 if keywords and not any(item in text for item in keywords):
                     continue
             href = title_element.get("href", "")
-            url = f"https://36kr.com{href}" if href and not href.startswith("http") else href
+            url = (
+                f"https://36kr.com{href}"
+                if href and not href.startswith("http")
+                else href
+            )
             items.append(
                 {
                     "source": "36kr",
@@ -267,15 +377,22 @@ class NewsCollector:
             title = hit.get("title") or ""
             if not title:
                 continue
-            url = hit.get("url") or f"https://news.ycombinator.com/item?id={hit.get('objectID', '')}"
+            url = (
+                hit.get("url")
+                or f"https://news.ycombinator.com/item?id={hit.get('objectID', '')}"
+            )
             published_at = self._parse_iso_datetime(hit.get("created_at"))
             items.append(
                 {
                     "source": "hacker_news",
-                    "source_item_id": str(hit.get("objectID") or self._hash_id(title, url)),
+                    "source_item_id": str(
+                        hit.get("objectID") or self._hash_id(title, url)
+                    ),
                     "title": title,
                     "content": hit.get("story_text") or title,
-                    "category": self._categorize(title, hit.get("story_text") or title, source="hacker_news"),
+                    "category": self._categorize(
+                        title, hit.get("story_text") or title, source="hacker_news"
+                    ),
                     "published_at": published_at,
                     "url": url,
                     "subjects": [],
@@ -335,7 +452,9 @@ class NewsCollector:
             source_item_id = str(item.get("source_item_id") or "")
             title = str(item.get("title") or "")
             url = str(item.get("url") or "")
-            title_key = re.sub(r"[\s\u3000:：,，。.!！?？【】\[\]()（）]", "", title)[:20]
+            title_key = re.sub(r"[\s\u3000:：,，。.!！?？【】\[\]()（）]", "", title)[
+                :20
+            ]
             if source_item_id and source_item_id in seen_ids:
                 continue
             if url and url in seen_urls:
@@ -351,14 +470,20 @@ class NewsCollector:
             result.append(item)
         return result
 
-    def _filter_by_stock_codes(self, items: list[dict], stock_codes: list[str]) -> list[dict]:
+    def _filter_by_stock_codes(
+        self, items: list[dict], stock_codes: list[str]
+    ) -> list[dict]:
         """Filter items to stock-linked news when stock codes are provided."""
         stock_code_set = {code.strip() for code in stock_codes if code.strip()}
         if not stock_code_set:
             return items
         result: list[dict] = []
         for item in items:
-            linked_codes = {str(code).strip() for code in item.get("stock_codes", []) if str(code).strip()}
+            linked_codes = {
+                str(code).strip()
+                for code in item.get("stock_codes", [])
+                if str(code).strip()
+            }
             if linked_codes & stock_code_set:
                 result.append(item)
         return result
@@ -375,26 +500,86 @@ class NewsCollector:
             url=item.get("url"),
         )
 
-    def _categorize(self, title: str, content: str, subjects: list[str] | None = None, source: str | None = None) -> str:
+    def _categorize(
+        self,
+        title: str,
+        content: str,
+        subjects: list[str] | None = None,
+        source: str | None = None,
+    ) -> str:
         """Categorize one news item using The-One style keyword groups with source-aware bias."""
         text = " ".join([title, content, " ".join(subjects or [])])
         text_lower = text.lower()
         source_name = (source or "").lower()
 
-        technology_priority = ["github", "开源", "ai", "llm", "gpt", "agent", "大模型", "机器人", "自动驾驶", "英伟达", "算力", "芯片", "半导体"]
-        company_priority = ["业绩", "财报", "融资", "ipo", "上市", "回购", "增持", "减持", "并购", "重组"]
-        macro_priority = ["央行", "政策", "财政", "货币", "美联储", "fed", "利率", "降息", "加息"]
-        geopolitics_priority = ["中美", "伊朗", "以色列", "俄", "乌", "战争", "冲突", "制裁", "外交", "关税"]
+        technology_priority = [
+            "github",
+            "开源",
+            "ai",
+            "llm",
+            "gpt",
+            "agent",
+            "大模型",
+            "机器人",
+            "自动驾驶",
+            "英伟达",
+            "算力",
+            "芯片",
+            "半导体",
+        ]
+        company_priority = [
+            "业绩",
+            "财报",
+            "融资",
+            "ipo",
+            "上市",
+            "回购",
+            "增持",
+            "减持",
+            "并购",
+            "重组",
+        ]
+        macro_priority = [
+            "央行",
+            "政策",
+            "财政",
+            "货币",
+            "美联储",
+            "fed",
+            "利率",
+            "降息",
+            "加息",
+        ]
+        geopolitics_priority = [
+            "中美",
+            "伊朗",
+            "以色列",
+            "俄",
+            "乌",
+            "战争",
+            "冲突",
+            "制裁",
+            "外交",
+            "关税",
+        ]
 
         if source_name in {"github_trending", "hacker_news"}:
             return "technology"
-        if source_name in {"wallstreetcn", "36kr"} and any(keyword.lower() in text_lower for keyword in technology_priority):
+        if source_name in {"wallstreetcn", "36kr"} and any(
+            keyword.lower() in text_lower for keyword in technology_priority
+        ):
             return "technology"
-        if source_name in {"wallstreetcn", "36kr"} and any(keyword.lower() in text_lower for keyword in company_priority):
+        if source_name in {"wallstreetcn", "36kr"} and any(
+            keyword.lower() in text_lower for keyword in company_priority
+        ):
             return "company"
-        if source_name in {"wallstreetcn", "36kr"} and any(keyword.lower() in text_lower for keyword in macro_priority):
+        if source_name in {"wallstreetcn", "36kr"} and any(
+            keyword.lower() in text_lower for keyword in macro_priority
+        ):
             return "macro"
-        if source_name in {"wallstreetcn", "36kr"} and any(keyword.lower() in text_lower for keyword in geopolitics_priority):
+        if source_name in {"wallstreetcn", "36kr"} and any(
+            keyword.lower() in text_lower for keyword in geopolitics_priority
+        ):
             return "geopolitics"
 
         for category, keywords in NEWS_CATEGORIES.items():
@@ -433,7 +618,9 @@ class NewsCollector:
         if not value:
             return None
         try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(
+                tzinfo=None
+            )
         except ValueError:
             return None
 
@@ -463,13 +650,28 @@ class NewsCollector:
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT DO NOTHING
                     """,
-                    [item.source, item.source_item_id, item.title, item.content, item.category, item.published_at, item_url],
+                    [
+                        item.source,
+                        item.source_item_id,
+                        item.title,
+                        item.content,
+                        item.category,
+                        item.published_at,
+                        item_url,
+                    ],
                 )
                 if before is None:
                     inserted += 1
                 else:
                     existing_url, existing_category, existing_published_at = before
-                    if (not existing_url and item_url) or (not existing_category and item.category) or (existing_published_at is None and item.published_at is not None):
+                    if (
+                        (not existing_url and item_url)
+                        or (not existing_category and item.category)
+                        or (
+                            existing_published_at is None
+                            and item.published_at is not None
+                        )
+                    ):
                         conn.execute(
                             """
                             UPDATE news_items
@@ -478,7 +680,13 @@ class NewsCollector:
                                 published_at = COALESCE(published_at, ?)
                             WHERE source = ? AND source_item_id = ?
                             """,
-                            [item_url, item.category, item.published_at, item.source, item.source_item_id],
+                            [
+                                item_url,
+                                item.category,
+                                item.published_at,
+                                item.source,
+                                item.source_item_id,
+                            ],
                         )
             except Exception:
                 logger.exception("Failed to persist news item {}", item.source_item_id)

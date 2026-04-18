@@ -63,7 +63,9 @@ def run_post_market_workflow(workflow_date: str | None = None) -> WorkflowRunRes
 
 @router.get("/context/latest", response_model=WorkflowContextPayload | None)
 def get_latest_workflow_context(
-    phase: WorkflowPhase = Query(..., description="Workflow phase to fetch context for"),
+    phase: WorkflowPhase = Query(
+        ..., description="Workflow phase to fetch context for"
+    ),
 ) -> WorkflowContextPayload | None:
     """Return the latest structured context for one workflow phase."""
     return _service.get_latest_context(phase)
@@ -71,7 +73,9 @@ def get_latest_workflow_context(
 
 @router.get("/insight/latest", response_model=WorkflowInsightResponse)
 def get_latest_workflow_insight(
-    phase: WorkflowPhase = Query(..., description="Workflow phase to fetch insight for"),
+    phase: WorkflowPhase = Query(
+        ..., description="Workflow phase to fetch insight for"
+    ),
     producer: str = Query("the_one", description="Insight producer identifier"),
 ) -> WorkflowInsightResponse:
     """Return the latest insight state for one workflow phase."""
@@ -79,7 +83,9 @@ def get_latest_workflow_insight(
 
 
 @router.put("/insight", response_model=WorkflowInsightResponse)
-def upsert_workflow_insight(payload: WorkflowInsightUpsertRequest) -> WorkflowInsightResponse:
+def upsert_workflow_insight(
+    payload: WorkflowInsightUpsertRequest,
+) -> WorkflowInsightResponse:
     """Create or replace the latest workflow insight for one phase."""
     _service.upsert_insight(payload)
     return _service.get_latest_insight(phase=payload.phase, producer=payload.producer)
