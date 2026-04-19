@@ -1,3 +1,5 @@
+"""Application configuration constants."""
+
 import os
 from enum import StrEnum
 from pathlib import Path
@@ -38,6 +40,10 @@ class DataProviderType(StrEnum):
 DB_PATH = Path(__file__).parent.parent / "data" / "tradepilot.duckdb"
 DATA_PROVIDER = DataProviderType.TUSHARE
 DATA_ROOT = Path(__file__).parent.parent / "data"
+LAKEHOUSE_ROOT = DATA_ROOT / "lakehouse"
+LAKEHOUSE_RAW_ROOT = LAKEHOUSE_ROOT / "raw"
+LAKEHOUSE_NORMALIZED_ROOT = LAKEHOUSE_ROOT / "normalized"
+LAKEHOUSE_DERIVED_ROOT = LAKEHOUSE_ROOT / "derived"
 BILIBILI_STORAGE_PATH = DATA_ROOT / "bilibili"
 RESEARCH_REPORT_ROOT = Path(
     _env("RESEARCH_REPORT_ROOT", "/Volumes/Data/research_report")
