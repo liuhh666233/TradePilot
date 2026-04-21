@@ -1,3 +1,5 @@
+"""DuckDB connection management and schema initialization."""
+
 import threading
 
 import duckdb
@@ -32,7 +34,7 @@ def get_conn() -> duckdb.DuckDBPyConnection:
     return conn
 
 
-def _init_tables(conn: duckdb.DuckDBPyConnection):
+def _init_tables(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS stock_daily (
             stock_code VARCHAR, date DATE,
@@ -206,6 +208,106 @@ def _init_tables(conn: duckdb.DuckDBPyConnection):
             stock_code VARCHAR, stock_name VARCHAR,
             buy_date DATE, buy_price DOUBLE, quantity INTEGER,
             status VARCHAR DEFAULT 'open'
+        );
+        CREATE TABLE IF NOT EXISTS etl_ingestion_runs (
+            run_id BIGINT PRIMARY KEY,
+            job_name VARCHAR,
+            dataset_name VARCHAR,
+            source_name VARCHAR,
+            trigger_mode VARCHAR,
+            status VARCHAR,
+            started_at TIMESTAMP,
+            finished_at TIMESTAMP,
+            request_start DATE,
+            request_end DATE,
+            records_discovered BIGINT DEFAULT 0,
+            records_inserted BIGINT DEFAULT 0,
+            records_updated BIGINT DEFAULT 0,
+            records_failed BIGINT DEFAULT 0,
+            partitions_written INTEGER DEFAULT 0,
+            error_message TEXT,
+            code_version VARCHAR
+        );
+        CREATE TABLE IF NOT EXISTS etl_raw_batches (
+            raw_batch_id BIGINT PRIMARY KEY,
+            run_id BIGINT,
+            dataset_name VARCHAR,
+            source_name VARCHAR,
+            source_endpoint VARCHAR,
+            storage_path VARCHAR,
+            file_format VARCHAR,
+            compression VARCHAR,
+            partition_year INTEGER,
+            partition_month INTEGER,
+            window_start DATE,
+            window_end DATE,
+            row_count BIGINT DEFAULT 0,
+            content_hash VARCHAR,
+            fetched_at TIMESTAMP,
+            schema_version VARCHAR,
+            is_fallback_source BOOLEAN DEFAULT FALSE
+        );
+        CREATE TABLE IF NOT EXISTS etl_validation_results (
+            validation_id BIGINT PRIMARY KEY,
+            run_id BIGINT,
+            raw_batch_id BIGINT,
+            dataset_name VARCHAR,
+            check_name VARCHAR,
+            check_level VARCHAR,
+            status VARCHAR,
+            subject_key VARCHAR,
+            metric_value DOUBLE,
+            threshold_value DOUBLE,
+            details_json TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS etl_source_watermarks (
+            dataset_name VARCHAR,
+            source_name VARCHAR,
+            latest_available_date DATE,
+            latest_fetched_date DATE,
+            latest_successful_run_id BIGINT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (dataset_name, source_name)
+        );
+        CREATE TABLE IF NOT EXISTS canonical_instruments (
+            instrument_id VARCHAR PRIMARY KEY,
+            instrument_name VARCHAR,
+            instrument_type VARCHAR,
+            exchange VARCHAR,
+            is_active BOOLEAN DEFAULT TRUE,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS canonical_trading_calendar (
+            exchange VARCHAR NOT NULL,
+            trade_date DATE NOT NULL,
+            is_open BOOLEAN NOT NULL,
+            pretrade_date DATE,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (exchange, trade_date)
+        );
+        CREATE TABLE IF NOT EXISTS canonical_rebalance_calendar (
+            calendar_name VARCHAR NOT NULL,
+            rebalance_date DATE NOT NULL,
+            effective_date DATE,
+            notes TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (calendar_name, rebalance_date)
+        );
+        CREATE TABLE IF NOT EXISTS canonical_sleeves (
+            sleeve_code VARCHAR PRIMARY KEY,
+            sleeve_name VARCHAR,
+            sleeve_type VARCHAR,
+            is_active BOOLEAN DEFAULT TRUE,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS source_registry (
+            source_name VARCHAR PRIMARY KEY,
+            source_type VARCHAR,
+            source_role VARCHAR,
+            is_active BOOLEAN DEFAULT TRUE,
+            base_note TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
     news_columns = {
