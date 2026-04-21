@@ -7,7 +7,7 @@
 
     flake-parts.url = "github:hercules-ci/flake-parts";
     flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
-    
+
     nixos-pkgs.url = "git+ssh://git@github.com/liuhh666233/nixos-pkgs";
     nixos-pkgs.inputs.nixpkgs.follows = "nixpkgs";
     nixos-pkgs.inputs.flake-parts.follows = "flake-parts";
