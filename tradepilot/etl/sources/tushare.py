@@ -43,7 +43,7 @@ class TushareSourceAdapter(BaseSourceAdapter):
             endpoint = "trade_cal"
         elif dataset_name == "reference.instruments":
             payload = self._fetch_instruments(request)
-            endpoint = "fund_basic,index_basic"
+            endpoint = _instrument_endpoint(request)
         elif dataset_name == "market.etf_daily":
             payload = self._fetch_market_daily(request, instrument_type="etf")
             endpoint = "fund_daily"
@@ -71,21 +71,15 @@ class TushareSourceAdapter(BaseSourceAdapter):
             exchange = request.context.get("exchange")
             exchanges = [str(exchange)] if exchange else ["SH", "SZ"]
         frames: list[pd.DataFrame] = []
-        for exchange in exchanges:
-            tushare_exchange = {
-                "SH": "SSE",
-                "SZ": "SZSE",
-                "SSE": "SSE",
-                "SZSE": "SZSE",
-            }.get(str(exchange).upper(), str(exchange).upper())
+        for tushare_exchange in _unique_list(
+            [_tushare_exchange(exchange) for exchange in exchanges]
+        ):
             frame = self._client.get_trade_calendar(
                 start_date.isoformat(), end_date.isoformat(), exchange=tushare_exchange
             )
             if not frame.empty:
                 frame = frame.copy()
-                frame["exchange"] = {"SSE": "SH", "SZSE": "SZ"}.get(
-                    tushare_exchange, str(exchange).upper()
-                )
+                frame["exchange"] = _canonical_exchange(tushare_exchange)
             frames.append(frame)
         return _concat_or_empty(
             frames, ["exchange", "trade_date", "is_open", "pretrade_date"]
@@ -119,7 +113,7 @@ class TushareSourceAdapter(BaseSourceAdapter):
         if not instrument_ids:
             return _empty_market_daily(instrument_type)
         frames: list[pd.DataFrame] = []
-        for instrument_id in instrument_ids:
+        for instrument_id in _unique_list(instrument_ids):
             if instrument_type == "etf":
                 frame = self._client.get_etf_daily(
                     str(instrument_id), start_date.isoformat(), end_date.isoformat()
@@ -161,6 +155,44 @@ def _context_list(request: IngestionRequest, key: str) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value]
     return []
+
+
+def _unique_list(values: list[str]) -> list[str]:
+    """Return values deduplicated in first-seen order."""
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _tushare_exchange(exchange: str) -> str:
+    """Return the Tushare exchange code for one canonical or provider code."""
+
+    text = str(exchange).upper()
+    return {"SH": "SSE", "SZ": "SZSE", "SSE": "SSE", "SZSE": "SZSE"}.get(text, text)
+
+
+def _canonical_exchange(exchange: str) -> str:
+    """Return the canonical Stage B exchange suffix for one provider code."""
+
+    text = str(exchange).upper()
+    return {"SSE": "SH", "SZSE": "SZ", "SH": "SH", "SZ": "SZ"}.get(text, text)
+
+
+def _instrument_endpoint(request: IngestionRequest) -> str:
+    """Return the Tushare endpoint lineage matching the requested instrument type."""
+
+    instrument_type = request.context.get("instrument_type")
+    if instrument_type == "etf":
+        return "fund_basic"
+    if instrument_type == "index":
+        return "index_basic"
+    return "fund_basic,index_basic"
 
 
 def _partition_hints(

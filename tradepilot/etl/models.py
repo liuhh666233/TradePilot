@@ -90,6 +90,7 @@ class DependencyType(StrEnum):
 
     SNAPSHOT = "snapshot"
     WINDOW = "window"
+    FRESHNESS = "freshness"
 
 
 class IngestionRequest(BaseModel):

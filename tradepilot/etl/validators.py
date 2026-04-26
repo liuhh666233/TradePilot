@@ -313,11 +313,22 @@ class MarketDailyValidator(BaseValidator):
                 )
         calendars = _open_day_lookup(ctx)
         if calendars is not None and not payload.empty:
-            joined = payload.merge(
+            calendar_payload = payload
+            if (
+                "exchange" not in calendar_payload.columns
+                and instruments is not None
+                and "exchange" in instruments.columns
+            ):
+                calendar_payload = calendar_payload.merge(
+                    instruments.loc[:, ["instrument_id", "exchange"]].drop_duplicates(),
+                    on="instrument_id",
+                    how="left",
+                )
+            joined = calendar_payload.merge(
                 calendars.assign(_is_open_day=True),
                 on=(
                     ["exchange", "trade_date"]
-                    if "exchange" in payload.columns
+                    if "exchange" in calendar_payload.columns
                     else ["trade_date"]
                 ),
                 how="left",
@@ -556,7 +567,7 @@ def _instrument_lookup(context: dict[str, Any]) -> pd.DataFrame | None:
     if conn is None:
         return None
     return conn.execute(
-        "SELECT instrument_id, instrument_type FROM canonical_instruments"
+        "SELECT instrument_id, instrument_type, exchange FROM canonical_instruments"
     ).fetchdf()
 
 

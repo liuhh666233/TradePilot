@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
+import json
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from tradepilot.etl.datasets import DatasetDefinition
 from tradepilot.etl.models import (
     CanonicalWriteResult,
     DatasetSyncResult,
+    DependencyType,
     IngestionRequest,
     RunStatus,
     SourceFetchResult,
@@ -112,7 +114,10 @@ class ETLService:
             canonical = normalized.canonical_payload
 
             validator = get_validator(dataset_name)
-            validation_results = validator.validate(canonical, context)
+            validation_results = self._source_payload_validation(
+                definition, fetch_result, run_id, raw_batch_id
+            )
+            validation_results.extend(validator.validate(canonical, context))
             counts = validation_counts(validation_results)
             self._persist_validation_results(validation_results)
 
@@ -149,8 +154,11 @@ class ETLService:
                 canonical["quality_status"] = quality_status
 
             write_result = self._write_canonical(definition, canonical)
-            self._advance_watermark(definition, source.source_name, run_id, canonical)
-            watermark_updated = True
+            if not canonical.empty:
+                self._advance_watermark(
+                    definition, source.source_name, run_id, canonical
+                )
+                watermark_updated = True
             self._finish_run(
                 run_id,
                 RunStatus.SUCCESS,
@@ -264,45 +272,67 @@ class ETLService:
             return []
         results: list[ValidationResultRecord] = []
         for dependency in definition.dependencies:
-            ok = self._dependency_available(definition, dependency, request)
+            dependency_type = definition.dependency_types.get(
+                dependency, DependencyType.WINDOW
+            )
+            ok = self._dependency_available(
+                definition, dependency, request, dependency_type
+            )
+            auto_run_attempted = False
             if not ok:
                 dep_request = self._dependency_request(definition, dependency, request)
+                auto_run_attempted = True
                 self.run_dataset_sync(dependency, dep_request)
-                ok = self._dependency_available(definition, dependency, request)
-            status = ValidationStatus.PASS_WITH_CAVEAT if ok else ValidationStatus.FAIL
+                ok = self._dependency_available(
+                    definition, dependency, request, dependency_type
+                )
+            if ok and auto_run_attempted:
+                status = ValidationStatus.PASS_WITH_CAVEAT
+            elif ok:
+                status = ValidationStatus.PASS
+            else:
+                status = ValidationStatus.FAIL
             results.append(
                 ValidationResultRecord(
                     validation_id=0,
                     run_id=run_id,
                     raw_batch_id=None,
                     dataset_name=definition.dataset_name,
-                    check_name=(
-                        "dependency_preflight.snapshot_missing"
-                        if dependency == "reference.instruments"
-                        else "dependency_preflight.window_missing"
-                    ),
+                    check_name=f"dependency_preflight.{dependency_type.value}_missing",
                     check_level="dependency",
                     status=status,
                     subject_key=dependency,
                     metric_value=1 if ok else 0,
                     threshold_value=1,
-                    details_json='{"auto_run_attempted": true}',
+                    details_json=json.dumps(
+                        {
+                            "auto_run_attempted": auto_run_attempted,
+                            "dependency_type": dependency_type.value,
+                        },
+                        sort_keys=True,
+                    ),
                     created_at=_utc_now(),
                 )
             )
         return results
 
     def _dependency_available(
-        self, definition: DatasetDefinition, dependency: str, request: IngestionRequest
+        self,
+        definition: DatasetDefinition,
+        dependency: str,
+        request: IngestionRequest,
+        dependency_type: DependencyType | None = None,
     ) -> bool:
+        if dependency_type == DependencyType.FRESHNESS:
+            return self._fresh_dependency_available(dependency, request)
         if dependency == "reference.instruments":
             instrument_type = _instrument_type_for_dataset(definition.dataset_name)
             ids = request.context.get("instrument_ids")
             if ids:
-                id_list = ids if isinstance(ids, list) else [ids]
+                id_list = _unique_strings(ids if isinstance(ids, list) else [ids])
                 self.conn.register(
                     "stage_b_required_instruments",
-                    pd.DataFrame({"instrument_id": [str(item) for item in id_list]}),
+                    pd.DataFrame({"instrument_id": id_list}),
                 )
                 count = self.conn.execute(
                     """
@@ -324,17 +354,95 @@ class ETLService:
             ).fetchone()[0]
             return int(count) > 0
         if dependency == "reference.trading_calendar":
-            start = request.request_start or request.request_end or date.today()
-            end = request.request_end or request.request_start or date.today()
-            count = self.conn.execute(
-                """
-                SELECT COUNT(*) FROM canonical_trading_calendar
-                WHERE trade_date BETWEEN ? AND ?
-                """,
-                [start, end],
-            ).fetchone()[0]
-            return int(count) > 0
+            start, end = _request_window(request)
+            exchanges = self._required_calendar_exchanges(definition, request)
+            if not exchanges:
+                return False
+            self.conn.register(
+                "stage_b_required_calendar_exchanges",
+                pd.DataFrame({"exchange": exchanges}),
+            )
+            try:
+                rows = self.conn.execute(
+                    """
+                    SELECT c.exchange,
+                           COUNT(DISTINCT c.trade_date) AS covered_days,
+                           MIN(c.trade_date) AS min_date,
+                           MAX(c.trade_date) AS max_date
+                    FROM canonical_trading_calendar c
+                    JOIN stage_b_required_calendar_exchanges r
+                      ON c.exchange = r.exchange
+                    WHERE c.trade_date BETWEEN ? AND ?
+                    GROUP BY c.exchange
+                    """,
+                    [start, end],
+                ).fetchall()
+            finally:
+                self.conn.unregister("stage_b_required_calendar_exchanges")
+            expected_days = (end - start).days + 1
+            if len(rows) != len(exchanges):
+                return False
+            return all(
+                int(count) == expected_days and min_date == start and max_date == end
+                for _, count, min_date, max_date in rows
+            )
         return True
+
+    def _fresh_dependency_available(
+        self, dependency: str, request: IngestionRequest
+    ) -> bool:
+        as_of = request.request_end or request.request_start or date.today()
+        max_age_days = int(request.context.get("freshness_max_age_days", 0) or 0)
+        minimum_fresh_date = as_of - timedelta(days=max_age_days)
+        count = self.conn.execute(
+            """
+            SELECT COUNT(*) FROM etl_source_watermarks
+            WHERE dataset_name = ?
+              AND latest_fetched_date IS NOT NULL
+              AND latest_fetched_date >= ?
+            """,
+            [dependency, minimum_fresh_date],
+        ).fetchone()[0]
+        return int(count) > 0
+
+    def _required_calendar_exchanges(
+        self, definition: DatasetDefinition, request: IngestionRequest
+    ) -> list[str]:
+        instrument_type = _instrument_type_for_dataset(definition.dataset_name)
+        if instrument_type is None:
+            return ["SH", "SZ"]
+        ids = request.context.get("instrument_ids")
+        if ids:
+            id_list = _unique_strings(ids if isinstance(ids, list) else [ids])
+            self.conn.register(
+                "stage_b_calendar_required_instruments",
+                pd.DataFrame({"instrument_id": id_list}),
+            )
+            try:
+                frame = self.conn.execute(
+                    """
+                    SELECT DISTINCT c.exchange
+                    FROM canonical_instruments c
+                    JOIN stage_b_calendar_required_instruments r
+                      ON c.instrument_id = r.instrument_id
+                    WHERE c.instrument_type = ?
+                    ORDER BY c.exchange
+                    """,
+                    [instrument_type],
+                ).fetchdf()
+            finally:
+                self.conn.unregister("stage_b_calendar_required_instruments")
+        else:
+            frame = self.conn.execute(
+                """
+                SELECT DISTINCT exchange
+                FROM canonical_instruments
+                WHERE instrument_type = ? AND is_active = TRUE
+                ORDER BY exchange
+                """,
+                [instrument_type],
+            ).fetchdf()
+        return [str(exchange) for exchange in frame["exchange"].dropna().tolist()]
 
     def _dependency_request(
         self, definition: DatasetDefinition, dependency: str, request: IngestionRequest
@@ -462,6 +570,8 @@ class ETLService:
         frame["month"] = frame["trade_date"].dt.month
         storage_paths: list[str] = []
         partitions_written = 0
+        records_inserted = 0
+        records_updated = 0
         for (year, month), partition in frame.groupby(["year", "month"], dropna=True):
             parts = [("year", int(year)), ("month", f"{int(month):02d}")]
             final_path = build_normalized_file_path(
@@ -474,8 +584,11 @@ class ETLService:
                     existing["trade_date"], errors="coerce"
                 )
                 merged = pd.concat([existing, partition_frame], ignore_index=True)
+                existing_keys = _market_daily_keys(existing)
             else:
                 merged = partition_frame
+                existing_keys = set()
+            partition_keys = _market_daily_keys(partition_frame)
             merged = (
                 merged.sort_values(["instrument_id", "trade_date", "ingested_at"])
                 .drop_duplicates(["instrument_id", "trade_date"], keep="last")
@@ -492,13 +605,48 @@ class ETLService:
             )
             storage_paths.append(write_result.relative_path)
             partitions_written += 1
+            records_inserted += len(partition_keys - existing_keys)
+            records_updated += len(partition_keys & existing_keys)
         return CanonicalWriteResult(
             records_written=len(canonical),
-            records_inserted=len(canonical),
-            records_updated=0,
+            records_inserted=records_inserted,
+            records_updated=records_updated,
             partitions_written=partitions_written,
             storage_paths=storage_paths,
         )
+
+    def _source_payload_validation(
+        self,
+        definition: DatasetDefinition,
+        fetch_result: SourceFetchResult,
+        run_id: int,
+        raw_batch_id: int,
+    ) -> list[ValidationResultRecord]:
+        if fetch_result.row_count > 0:
+            return []
+        status = (
+            ValidationStatus.FAIL
+            if definition.dataset_name.startswith("reference.")
+            else ValidationStatus.PASS_WITH_CAVEAT
+        )
+        return [
+            ValidationResultRecord(
+                validation_id=0,
+                run_id=run_id,
+                raw_batch_id=raw_batch_id,
+                dataset_name=definition.dataset_name,
+                check_name="source_contract.empty_payload",
+                check_level="contract",
+                status=status,
+                subject_key=definition.dataset_name,
+                metric_value=0,
+                threshold_value=1,
+                details_json=json.dumps(
+                    {"message": "source returned no rows"}, ensure_ascii=False
+                ),
+                created_at=_utc_now(),
+            )
+        ]
 
     def _next_id(self, table: str, column: str) -> int:
         value = self.conn.execute(
@@ -724,6 +872,46 @@ def _raw_partition_hints(
         }
     start = request.request_start or request.request_end or date.today()
     return {"year": start.year, "month": f"{start.month:02d}"}
+
+
+def _request_window(request: IngestionRequest) -> tuple[date, date]:
+    """Return an ordered concrete request window for dependency checks."""
+
+    start = request.request_start or request.request_end or date.today()
+    end = request.request_end or request.request_start or date.today()
+    if start > end:
+        return end, start
+    return start, end
+
+
+def _unique_strings(values: Iterable[object]) -> list[str]:
+    """Return stringified values deduplicated in first-seen order."""
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value)
+        if text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _market_daily_keys(frame: pd.DataFrame) -> set[tuple[str, date]]:
+    """Return business keys from a market daily frame."""
+
+    if frame.empty:
+        return set()
+    key_frame = frame.loc[:, ["instrument_id", "trade_date"]].copy()
+    key_frame["trade_date"] = pd.to_datetime(
+        key_frame["trade_date"], errors="coerce"
+    ).dt.date
+    return {
+        (str(row.instrument_id), row.trade_date)
+        for row in key_frame.itertuples(index=False)
+        if pd.notna(row.instrument_id) and pd.notna(row.trade_date)
+    }
 
 
 def _instrument_type_for_dataset(dataset_name: str) -> str | None:
