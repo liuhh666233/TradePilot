@@ -189,3 +189,9 @@ briefings/*
 
 # research
 research_report/*
+
+# local lakehouse data
+data/lakehouse/
+
+# local agent state
+.codex

@@ -12,6 +12,15 @@ _thread_local = threading.local()
 _init_lock = threading.Lock()
 _initialized = False
 
+_STAGE_B_SEQUENCES = {
+    "etl_ingestion_runs_run_id_seq": ("etl_ingestion_runs", "run_id"),
+    "etl_raw_batches_raw_batch_id_seq": ("etl_raw_batches", "raw_batch_id"),
+    "etl_validation_results_validation_id_seq": (
+        "etl_validation_results",
+        "validation_id",
+    ),
+}
+
 
 def get_conn() -> duckdb.DuckDBPyConnection:
     """Return a thread-local DuckDB connection.
@@ -272,10 +281,14 @@ def _init_tables(conn: duckdb.DuckDBPyConnection) -> None:
         );
         CREATE TABLE IF NOT EXISTS canonical_instruments (
             instrument_id VARCHAR PRIMARY KEY,
+            source_instrument_id VARCHAR,
             instrument_name VARCHAR,
             instrument_type VARCHAR,
             exchange VARCHAR,
+            list_date DATE,
+            delist_date DATE,
             is_active BOOLEAN DEFAULT TRUE,
+            source_name VARCHAR,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS canonical_trading_calendar (
@@ -310,11 +323,26 @@ def _init_tables(conn: duckdb.DuckDBPyConnection) -> None:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
+    instrument_columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info('canonical_instruments')").fetchall()
+    }
+    if "source_instrument_id" not in instrument_columns:
+        conn.execute(
+            "ALTER TABLE canonical_instruments ADD COLUMN source_instrument_id VARCHAR"
+        )
+    if "list_date" not in instrument_columns:
+        conn.execute("ALTER TABLE canonical_instruments ADD COLUMN list_date DATE")
+    if "delist_date" not in instrument_columns:
+        conn.execute("ALTER TABLE canonical_instruments ADD COLUMN delist_date DATE")
+    if "source_name" not in instrument_columns:
+        conn.execute("ALTER TABLE canonical_instruments ADD COLUMN source_name VARCHAR")
     news_columns = {
         row[1] for row in conn.execute("PRAGMA table_info('news_items')").fetchall()
     }
     if "url" not in news_columns:
         conn.execute("ALTER TABLE news_items ADD COLUMN url VARCHAR")
+    ensure_stage_b_sequences(conn)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS trades (
             id INTEGER PRIMARY KEY,
@@ -352,3 +380,28 @@ def _init_tables(conn: duckdb.DuckDBPyConnection) -> None:
             signal_summary VARCHAR
         );
     """)
+
+
+def ensure_stage_b_sequences(conn: duckdb.DuckDBPyConnection) -> None:
+    """Create DuckDB sequences used to allocate Stage B metadata IDs."""
+
+    for sequence_name, (table_name, column_name) in _STAGE_B_SEQUENCES.items():
+        exists = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) FROM duckdb_sequences()
+                WHERE sequence_name = ?
+                """,
+                [sequence_name],
+            ).fetchone()[0]
+        )
+        if exists:
+            continue
+        start_value = int(
+            conn.execute(
+                f"SELECT COALESCE(MAX({column_name}), 0) + 1 FROM {table_name}"
+            ).fetchone()[0]
+        )
+        conn.execute(
+            f"CREATE SEQUENCE IF NOT EXISTS {sequence_name} START WITH {start_value}"
+        )
