@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 import json
 import re
 from typing import Any
@@ -113,8 +113,8 @@ class TradingCalendarValidator(BaseValidator):
             ["exchange", "trade_date"],
             "pretrade_date must be earlier than trade_date",
         )
-        results.append(_warning_or_pass(ctx, "calendar.open_day_pretrade_sequence"))
-        results.append(_warning_or_pass(ctx, "calendar.date_continuity"))
+        _open_day_pretrade_sequence(results, ctx, payload)
+        _calendar_date_continuity(results, ctx, payload)
         return results
 
 
@@ -403,6 +403,8 @@ class MarketDailyValidator(BaseValidator):
             status=ValidationStatus.WARNING,
             threshold_value=float(ctx.get("extreme_return_threshold", 20)),
         )
+        _market_daily_change_consistency(results, ctx, payload)
+        _market_daily_pct_chg_consistency(results, ctx, payload)
         return results
 
 
@@ -529,14 +531,6 @@ def _record(
     )
 
 
-def _warning_or_pass(
-    context: dict[str, Any], check_name: str
-) -> ValidationResultRecord:
-    """Return a placeholder pass record for warning-capable checks."""
-
-    return _record(context, check_name, "dataset", ValidationStatus.PASS)
-
-
 def _subject_key(row: pd.Series, columns: list[str]) -> str:
     """Build a stable subject key from row values."""
 
@@ -588,6 +582,154 @@ def _open_day_lookup(context: dict[str, Any]) -> pd.DataFrame | None:
     frame = frame.copy()
     frame["trade_date"] = pd.to_datetime(frame["trade_date"], errors="coerce").dt.date
     return frame
+
+
+def _open_day_pretrade_sequence(
+    results: list[ValidationResultRecord],
+    context: dict[str, Any],
+    payload: pd.DataFrame,
+) -> None:
+    """Validate that open-day pretrade_date points to the prior open day."""
+
+    open_days = payload[payload["is_open"].eq(True)].copy()
+    if open_days.empty:
+        results.append(
+            _record(
+                context,
+                "calendar.open_day_pretrade_sequence",
+                "dataset",
+                ValidationStatus.PASS,
+            )
+        )
+        return
+    open_days["trade_date"] = pd.to_datetime(
+        open_days["trade_date"], errors="coerce"
+    ).dt.date
+    open_days["pretrade_date"] = pd.to_datetime(
+        open_days["pretrade_date"], errors="coerce"
+    ).dt.date
+    open_days = open_days.sort_values(["exchange", "trade_date"])
+    open_days["_expected_pretrade_date"] = open_days.groupby("exchange")[
+        "trade_date"
+    ].shift(1)
+    expected_pretrade = open_days["_expected_pretrade_date"]
+    bad_sequence = open_days[
+        expected_pretrade.notna() & (open_days["pretrade_date"] != expected_pretrade)
+    ]
+    _row_records(
+        results,
+        context,
+        bad_sequence,
+        "calendar.open_day_pretrade_sequence",
+        ["exchange", "trade_date"],
+        "pretrade_date must match the previous open trade_date",
+    )
+
+
+def _calendar_date_continuity(
+    results: list[ValidationResultRecord],
+    context: dict[str, Any],
+    payload: pd.DataFrame,
+) -> None:
+    """Validate that each exchange has a continuous daily date spine."""
+
+    frame = payload.dropna(subset=["exchange", "trade_date"]).copy()
+    frame["trade_date"] = pd.to_datetime(frame["trade_date"], errors="coerce").dt.date
+    missing: list[str] = []
+    for exchange, exchange_frame in frame.groupby("exchange"):
+        dates = set(exchange_frame["trade_date"].dropna().tolist())
+        if not dates:
+            continue
+        current = min(dates)
+        end = max(dates)
+        while current <= end:
+            if current not in dates:
+                missing.append(f"{exchange}|{current.isoformat()}")
+            current = current + timedelta(days=1)
+    results.append(
+        _record(
+            context,
+            "calendar.date_continuity",
+            "dataset",
+            ValidationStatus.FAIL if missing else ValidationStatus.PASS,
+            metric_value=len(missing),
+            threshold_value=0,
+            details={"missing_dates": missing[:50]},
+        )
+    )
+
+
+def _market_daily_change_consistency(
+    results: list[ValidationResultRecord],
+    context: dict[str, Any],
+    payload: pd.DataFrame,
+) -> None:
+    """Validate change against close - pre_close."""
+
+    required = {"close", "pre_close", "change"}
+    if not required.issubset(payload.columns):
+        results.append(
+            _record(
+                context,
+                "market_daily.change_consistency",
+                "contract",
+                ValidationStatus.FAIL,
+                details={"missing_columns": sorted(required - set(payload.columns))},
+            )
+        )
+        return
+    tolerance = float(context.get("change_consistency_tolerance", 1e-6))
+    comparable = payload.dropna(subset=["close", "pre_close", "change"]).copy()
+    expected = comparable["close"] - comparable["pre_close"]
+    bad = comparable[(comparable["change"] - expected).abs() > tolerance]
+    _row_records(
+        results,
+        context,
+        bad,
+        "market_daily.change_consistency",
+        ["instrument_id", "trade_date"],
+        "change must equal close - pre_close",
+        status=ValidationStatus.WARNING,
+        threshold_value=tolerance,
+    )
+
+
+def _market_daily_pct_chg_consistency(
+    results: list[ValidationResultRecord],
+    context: dict[str, Any],
+    payload: pd.DataFrame,
+) -> None:
+    """Validate pct_chg against price movement."""
+
+    required = {"close", "pre_close", "pct_chg"}
+    if not required.issubset(payload.columns):
+        results.append(
+            _record(
+                context,
+                "market_daily.pct_chg_consistency",
+                "contract",
+                ValidationStatus.FAIL,
+                details={"missing_columns": sorted(required - set(payload.columns))},
+            )
+        )
+        return
+    tolerance = float(context.get("pct_chg_consistency_tolerance", 0.01))
+    comparable = payload.dropna(subset=["close", "pre_close", "pct_chg"]).copy()
+    comparable = comparable[comparable["pre_close"] != 0]
+    expected = (
+        (comparable["close"] - comparable["pre_close"]) / comparable["pre_close"] * 100
+    )
+    bad = comparable[(comparable["pct_chg"] - expected).abs() > tolerance]
+    _row_records(
+        results,
+        context,
+        bad,
+        "market_daily.pct_chg_consistency",
+        ["instrument_id", "trade_date"],
+        "pct_chg must match percentage movement from pre_close to close",
+        status=ValidationStatus.WARNING,
+        threshold_value=tolerance,
+    )
 
 
 def _utc_now() -> datetime:

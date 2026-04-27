@@ -8,7 +8,11 @@ from typing import Any
 import pandas as pd
 
 from tradepilot.data.tushare_client import TushareClient
-from tradepilot.etl.models import IngestionRequest, SourceFetchResult
+from tradepilot.etl.models import (
+    IngestionRequest,
+    SourceFetchResult,
+    normalize_request_window,
+)
 from tradepilot.etl.sources.base import BaseSourceAdapter, SourceRole
 
 
@@ -38,6 +42,7 @@ class TushareSourceAdapter(BaseSourceAdapter):
 
         if not self.supports_dataset(dataset_name):
             raise KeyError(f"tushare source does not support dataset: {dataset_name}")
+        window_start, window_end = _result_window(dataset_name, request)
         if dataset_name == "reference.trading_calendar":
             payload = self._fetch_trading_calendar(request)
             endpoint = "trade_cal"
@@ -56,8 +61,8 @@ class TushareSourceAdapter(BaseSourceAdapter):
             source_endpoint=endpoint,
             payload=payload,
             row_count=len(payload),
-            window_start=request.request_start,
-            window_end=request.request_end,
+            window_start=window_start,
+            window_end=window_end,
             partition_hints=_partition_hints(dataset_name, request),
             fetched_at=_utc_now(),
             schema_version="stage_b_v1",
@@ -132,10 +137,17 @@ class TushareSourceAdapter(BaseSourceAdapter):
 def _date_window(request: IngestionRequest) -> tuple[date, date]:
     """Return a concrete request window."""
 
-    today = date.today()
-    start = request.request_start or request.request_end or today
-    end = request.request_end or request.request_start or today
-    return start, end
+    return normalize_request_window(request)
+
+
+def _result_window(
+    dataset_name: str, request: IngestionRequest
+) -> tuple[date | None, date | None]:
+    """Return normalized lineage windows for windowed datasets."""
+
+    if dataset_name == "reference.instruments":
+        return request.request_start, request.request_end
+    return normalize_request_window(request)
 
 
 def _utc_now() -> datetime:

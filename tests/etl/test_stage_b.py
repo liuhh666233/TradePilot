@@ -42,13 +42,17 @@ class MockTushareClient:
 
     def __init__(self) -> None:
         self.trade_calendar_calls: list[str] = []
+        self.trade_calendar_windows: list[tuple[str, str]] = []
         self.etf_daily_calls: list[str] = []
+        self.etf_daily_windows: list[tuple[str, str]] = []
         self.index_daily_calls: list[str] = []
+        self.index_daily_windows: list[tuple[str, str]] = []
 
     def get_trade_calendar(
         self, start_date: str, end_date: str, exchange: str = "SSE"
     ) -> pd.DataFrame:
         self.trade_calendar_calls.append(exchange)
+        self.trade_calendar_windows.append((start_date, end_date))
         return pd.DataFrame(
             {
                 "exchange": ["SH" if exchange == "SSE" else "SZ"],
@@ -82,6 +86,7 @@ class MockTushareClient:
         self, etf_code: str, start_date: str, end_date: str
     ) -> pd.DataFrame:
         self.etf_daily_calls.append(etf_code)
+        self.etf_daily_windows.append((start_date, end_date))
         return pd.DataFrame(
             {
                 "date": [pd.Timestamp("2026-04-24")],
@@ -102,6 +107,7 @@ class MockTushareClient:
         self, index_code: str, start_date: str, end_date: str
     ) -> pd.DataFrame:
         self.index_daily_calls.append(index_code)
+        self.index_daily_windows.append((start_date, end_date))
         return pd.DataFrame(
             {
                 "date": [pd.Timestamp("2026-04-24")],
@@ -190,6 +196,23 @@ class StageBSourceNormalizerValidatorTests(unittest.TestCase):
             ),
         )
         self.assertEqual(client.etf_daily_calls, ["510300.SH"])
+
+    def test_tushare_source_normalizes_reversed_request_windows(self) -> None:
+        client = MockTushareClient()
+        adapter = TushareSourceAdapter(client)
+
+        result = adapter.fetch(
+            "market.etf_daily",
+            IngestionRequest(
+                request_start=date(2026, 4, 25),
+                request_end=date(2026, 4, 24),
+                context={"instrument_ids": ["510300.SH"]},
+            ),
+        )
+
+        self.assertEqual(client.etf_daily_windows, [("2026-04-24", "2026-04-25")])
+        self.assertEqual(result.window_start, date(2026, 4, 24))
+        self.assertEqual(result.window_end, date(2026, 4, 25))
 
     def test_dependency_type_supports_freshness_checks(self) -> None:
         self.assertEqual(DependencyType.FRESHNESS.value, "freshness")
@@ -348,6 +371,65 @@ class StageBSourceNormalizerValidatorTests(unittest.TestCase):
         self.assertTrue(
             any(
                 result.check_name == "market_daily.trade_date_open"
+                and result.status == ValidationStatus.FAIL
+                for result in results
+            )
+        )
+
+    def test_market_daily_validator_runs_price_consistency_rules(self) -> None:
+        daily = pd.DataFrame(
+            {
+                "instrument_id": ["510300.SH"],
+                "trade_date": [date(2026, 4, 24)],
+                "open": [4.0],
+                "high": [4.2],
+                "low": [3.9],
+                "close": [4.1],
+                "pre_close": [4.0],
+                "change": [0.2],
+                "pct_chg": [1.0],
+                "volume": [100.0],
+                "amount": [400.0],
+            }
+        )
+
+        results = MarketDailyValidator().validate(
+            daily, {"dataset_name": "market.etf_daily", "run_id": 1}
+        )
+
+        self.assertTrue(
+            any(
+                result.check_name == "market_daily.change_consistency"
+                and result.status == ValidationStatus.WARNING
+                for result in results
+            )
+        )
+        self.assertTrue(
+            any(
+                result.check_name == "market_daily.pct_chg_consistency"
+                and result.status == ValidationStatus.WARNING
+                for result in results
+            )
+        )
+
+    def test_calendar_validator_runs_continuity_rules(self) -> None:
+        calendar = pd.DataFrame(
+            {
+                "exchange": ["SH", "SH"],
+                "trade_date": [date(2026, 4, 24), date(2026, 4, 26)],
+                "is_open": [True, True],
+                "pretrade_date": [date(2026, 4, 23), date(2026, 4, 24)],
+            }
+        )
+
+        results = TradingCalendarValidator().validate(
+            calendar,
+            {"dataset_name": "reference.trading_calendar", "run_id": 1},
+        )
+
+        self.assertTrue(
+            any(
+                result.check_name == "calendar.date_continuity"
                 and result.status == ValidationStatus.FAIL
                 for result in results
             )
@@ -525,6 +607,25 @@ class StageBServiceIntegrationTests(unittest.TestCase):
             """).fetchone()[0]
         self.assertEqual(empty_check_count, 1)
         self.assertEqual(watermark_count, 0)
+
+    def test_sequence_id_allocation_skips_existing_legacy_ids(self) -> None:
+        self.conn.execute("""
+            INSERT INTO etl_ingestion_runs (
+                run_id, job_name, dataset_name, source_name,
+                trigger_mode, status, started_at
+            ) VALUES (
+                50, 'legacy', 'reference.instruments', 'tushare',
+                'manual', 'success', CURRENT_TIMESTAMP
+            )
+            """)
+
+        result = self.service.run_dataset_sync(
+            "reference.instruments",
+            IngestionRequest(context={"instrument_type": "etf"}),
+        )
+
+        self.assertEqual(result.status, RunStatus.SUCCESS)
+        self.assertGreater(result.run_id, 50)
 
     def test_freshness_dependency_checks_watermark_recency(self) -> None:
         definition = DatasetDefinition(

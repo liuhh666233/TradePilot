@@ -349,3 +349,16 @@ class SourceWatermarkRecord(BaseModel):
     updated_at: datetime = Field(
         description="Timestamp when the watermark record was last updated."
     )
+
+
+def normalize_request_window(
+    request: IngestionRequest, default_date: date | None = None
+) -> tuple[date, date]:
+    """Return an ordered concrete request window."""
+
+    fallback = default_date or date.today()
+    start = request.request_start or request.request_end or fallback
+    end = request.request_end or request.request_start or fallback
+    if start > end:
+        return end, start
+    return start, end

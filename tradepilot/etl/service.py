@@ -23,6 +23,7 @@ from tradepilot.etl.models import (
     TriggerMode,
     ValidationResultRecord,
     ValidationStatus,
+    normalize_request_window,
 )
 from tradepilot.etl.normalizers import get_normalizer
 from tradepilot.etl.registry import DatasetRegistry, register_stage_b_datasets
@@ -39,6 +40,15 @@ from tradepilot.etl.validators import (
     validation_counts,
 )
 
+_ID_SEQUENCES: dict[tuple[str, str], str] = {
+    ("etl_ingestion_runs", "run_id"): "etl_ingestion_runs_run_id_seq",
+    ("etl_raw_batches", "raw_batch_id"): "etl_raw_batches_raw_batch_id_seq",
+    (
+        "etl_validation_results",
+        "validation_id",
+    ): "etl_validation_results_validation_id_seq",
+}
+
 
 class ETLService:
     """Application service for Stage B single-dataset syncs."""
@@ -51,6 +61,7 @@ class ETLService:
         lakehouse_root: Path | None = None,
     ) -> None:
         self.conn = conn or db.get_conn()
+        db.ensure_stage_b_sequences(self.conn)
         self.registry = registry or DatasetRegistry()
         register_stage_b_datasets(self.registry)
         adapters = list(source_adapters or [TushareSourceAdapter()])
@@ -354,7 +365,7 @@ class ETLService:
             ).fetchone()[0]
             return int(count) > 0
         if dependency == "reference.trading_calendar":
-            start, end = _request_window(request)
+            start, end = normalize_request_window(request)
             exchanges = self._required_calendar_exchanges(definition, request)
             if not exchanges:
                 return False
@@ -649,10 +660,20 @@ class ETLService:
         ]
 
     def _next_id(self, table: str, column: str) -> int:
-        value = self.conn.execute(
-            f"SELECT COALESCE(MAX({column}), 0) + 1 FROM {table}"
-        ).fetchone()[0]
-        return int(value)
+        sequence_name = _ID_SEQUENCES.get((table, column))
+        if sequence_name is None:
+            raise KeyError(f"no id sequence registered for {table}.{column}")
+        while True:
+            value = int(
+                self.conn.execute("SELECT nextval(?)", [sequence_name]).fetchone()[0]
+            )
+            max_existing = int(
+                self.conn.execute(
+                    f"SELECT COALESCE(MAX({column}), 0) FROM {table}"
+                ).fetchone()[0]
+            )
+            if value > max_existing:
+                return value
 
     def _insert_run(
         self,
@@ -872,16 +893,6 @@ def _raw_partition_hints(
         }
     start = request.request_start or request.request_end or date.today()
     return {"year": start.year, "month": f"{start.month:02d}"}
-
-
-def _request_window(request: IngestionRequest) -> tuple[date, date]:
-    """Return an ordered concrete request window for dependency checks."""
-
-    start = request.request_start or request.request_end or date.today()
-    end = request.request_end or request.request_start or date.today()
-    if start > end:
-        return end, start
-    return start, end
 
 
 def _unique_strings(values: Iterable[object]) -> list[str]:

@@ -51,6 +51,16 @@ class DuckDBInitTests(unittest.TestCase):
         self.assertIn("ingestion_runs", table_names)
         self.assertIn("trading_calendar", table_names)
 
+        sequence_names = {
+            row[0]
+            for row in conn.execute(
+                "SELECT sequence_name FROM duckdb_sequences()"
+            ).fetchall()
+        }
+        self.assertIn("etl_ingestion_runs_run_id_seq", sequence_names)
+        self.assertIn("etl_raw_batches_raw_batch_id_seq", sequence_names)
+        self.assertIn("etl_validation_results_validation_id_seq", sequence_names)
+
     def test_get_conn_is_idempotent(self) -> None:
         """Allow repeated initialization without schema churn."""
 
