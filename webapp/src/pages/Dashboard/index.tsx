@@ -17,6 +17,7 @@ import {
 import OvernightNewsTabs, { newsDirectionColor, newsDirectionLabel } from "./OvernightNewsTabs";
 import { HistoryOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
+  getLatestEtfAwContext,
   getLatestWorkflow,
   getLatestWorkflowContext,
   getLatestWorkflowInsight,
@@ -26,6 +27,7 @@ import {
   getWorkflowStatus,
   runPostMarketWorkflow,
   runPreMarketWorkflow,
+  type EtfAwSnapshotContext,
   type WorkflowContextPayload,
   type WorkflowInsightResponse,
   type WorkflowInsightSection,
@@ -47,6 +49,8 @@ function statusColor(status?: string) {
       stale: "orange",
       pending: "blue",
       not_requested: "default",
+      complete: "green",
+      missing: "red",
     } as Record<string, string>
   )[status || ""] || "default";
 }
@@ -60,6 +64,10 @@ function stepStatusColor(status?: string) {
       partial: "orange",
     } as Record<string, string>
   )[status || ""] || "default";
+}
+
+function formatPercent(value?: number | null) {
+  return typeof value === "number" ? `${(value * 100).toFixed(2)}%` : "-";
 }
 
 function getOverviewText(context: WorkflowContextPayload | null, workflow?: WorkflowRunResponse | null) {
@@ -238,6 +246,7 @@ export default function Dashboard() {
   const [postWorkflow, setPostWorkflow] = useState<WorkflowRunResponse | null>(null);
   const [preContext, setPreContext] = useState<WorkflowContextPayload | null>(null);
   const [postContext, setPostContext] = useState<WorkflowContextPayload | null>(null);
+  const [etfAwContext, setEtfAwContext] = useState<EtfAwSnapshotContext | null>(null);
   const [preInsight, setPreInsight] = useState<WorkflowInsightResponse | null>(null);
   const [postInsight, setPostInsight] = useState<WorkflowInsightResponse | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState<any>(null);
@@ -256,6 +265,7 @@ export default function Dashboard() {
         post,
         preContextData,
         postContextData,
+        etfAwContextData,
         preInsightData,
         postInsightData,
         status,
@@ -267,6 +277,7 @@ export default function Dashboard() {
         getLatestWorkflow("post_market"),
         getLatestWorkflowContext("pre_market"),
         getLatestWorkflowContext("post_market"),
+        getLatestEtfAwContext(),
         getLatestWorkflowInsight("pre_market"),
         getLatestWorkflowInsight("post_market"),
         getWorkflowStatus(),
@@ -278,6 +289,7 @@ export default function Dashboard() {
       setPostWorkflow(post);
       setPreContext(preContextData);
       setPostContext(postContextData);
+      setEtfAwContext(etfAwContextData);
       setPreInsight(preInsightData);
       setPostInsight(postInsightData);
       setWorkflowStatus(status);
@@ -334,6 +346,7 @@ export default function Dashboard() {
   const sectorPositioning = context?.sector_positioning || {};
   const positionHealth = context?.position_health || {};
   const nextDayPrep = context?.next_day_prep || {};
+  const etfAwSnapshot: EtfAwSnapshotContext | null = context?.etf_aw_context || etfAwContext;
   const newsItems = overnightNews?.highlights || [];
   const categorizedNews = Object.entries(overnightNews?.categorized || {}).filter(([, items]) => Array.isArray(items) && items.length > 0);
   const newsSectorMappings = overnightNews?.sector_mappings || [];
@@ -342,6 +355,7 @@ export default function Dashboard() {
   const riskNewsSectors = actionFrame?.risk_news_sectors || [];
   const trackedItems = positionHealth?.tracked_items || [];
   const watchSectorRecords = sectorPositioning?.watch_sectors || [];
+  const etfAwRows = etfAwSnapshot?.sleeves || [];
 
   const insightPayload = currentInsight?.insight?.insight || {};
   const insightSections: WorkflowInsightSection[] = Array.isArray(insightPayload?.sections) ? insightPayload.sections : [];
@@ -364,6 +378,35 @@ export default function Dashboard() {
         nextDayPrep?.market_bias ? `明日偏向：${nextDayPrep.market_bias}` : null,
         trackedItems.length > 0 ? `跟踪对象：${trackedItems.length} 个` : null,
       ].filter(Boolean);
+
+  const etfAwPanel = {
+    key: "etf-aw",
+    label: "ETF 全天候上下文",
+    children: (
+      <Space size={10} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "stretch" }}>
+        <Space wrap>
+          <Tag color={statusColor(etfAwSnapshot?.data_status)}>{etfAwSnapshot?.data_status || "none"}</Tag>
+          <Text type="secondary">调仓日：{etfAwSnapshot?.rebalance_date || "-"}</Text>
+        </Space>
+        <Table
+          size="small"
+          pagination={false}
+          rowKey="sleeve_code"
+          dataSource={etfAwRows}
+          columns={[
+            { title: "Sleeve", dataIndex: "sleeve_role", key: "sleeve_role" },
+            { title: "代码", dataIndex: "sleeve_code", key: "sleeve_code" },
+            { title: "1M", dataIndex: "return_1m", key: "return_1m", render: formatPercent },
+            { title: "3M", dataIndex: "return_3m", key: "return_3m", render: formatPercent },
+            { title: "6M", dataIndex: "return_6m", key: "return_6m", render: formatPercent },
+            { title: "3M 波动", dataIndex: "volatility_3m", key: "volatility_3m", render: formatPercent },
+            { title: "6M 回撤", dataIndex: "max_drawdown_6m", key: "max_drawdown_6m", render: formatPercent },
+            { title: "状态", dataIndex: "data_status", key: "data_status", render: (value: string) => <Tag color={statusColor(value)}>{value}</Tag> },
+          ]}
+        />
+      </Space>
+    ),
+  };
 
   const contextPanels = activePhase === "pre_market"
     ? [
@@ -388,6 +431,7 @@ export default function Dashboard() {
             />
           ),
         },
+        etfAwPanel,
         {
           key: "watchlist",
           label: "今日关注清单",
@@ -539,6 +583,7 @@ export default function Dashboard() {
             />
           ),
         },
+        etfAwPanel,
         {
           key: "position-health",
           label: "持仓健康度",

@@ -81,6 +81,32 @@ export interface WorkflowContextPayload {
   metadata: Record<string, any>;
 }
 
+export interface EtfAwSleeveSnapshot {
+  sleeve_code: string;
+  sleeve_role: string;
+  close?: number | null;
+  adj_factor?: number | null;
+  adj_close?: number | null;
+  return_1m?: number | null;
+  return_3m?: number | null;
+  return_6m?: number | null;
+  volatility_3m?: number | null;
+  max_drawdown_6m?: number | null;
+  data_status: string;
+  quality_notes?: Record<string, any>;
+  source_max_trade_date?: string | null;
+}
+
+export interface EtfAwSnapshotContext {
+  schema_version: string;
+  calendar_name: string;
+  calendar_month: string;
+  rebalance_date: string;
+  effective_date?: string | null;
+  data_status: string;
+  sleeves: EtfAwSleeveSnapshot[];
+}
+
 export interface InsightMetric {
   label: string;
   value: string | number | null;
@@ -167,6 +193,8 @@ export const getLatestWorkflow = (phase: WorkflowPhase) =>
   fetchJson<WorkflowRunResponse | null>(`/workflow/latest?phase=${phase}`);
 export const getLatestWorkflowContext = (phase: WorkflowPhase) =>
   fetchJson<WorkflowContextPayload | null>(`/workflow/context/latest?phase=${phase}`);
+export const getLatestEtfAwContext = (asOfDate?: string) =>
+  fetchJson<EtfAwSnapshotContext | null>(`/workflow/etf-aw/latest${asOfDate ? `?as_of_date=${encodeURIComponent(asOfDate)}` : ""}`);
 export const getLatestWorkflowInsight = (phase: WorkflowPhase, producer = "the_one") =>
   fetchJson<WorkflowInsightResponse>(`/workflow/insight/latest?phase=${phase}&producer=${encodeURIComponent(producer)}`);
 export const upsertWorkflowInsight = (data: WorkflowInsightUpsertRequest) =>
