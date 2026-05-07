@@ -125,6 +125,24 @@ class StageDRebalanceSnapshotTests(unittest.TestCase):
         frame = self._read_snapshot_file(2024, 7)
         self.assertEqual(set(frame["data_status"]), {"stale"})
 
+    def test_lagged_source_panel_marks_stale_before_missing(self) -> None:
+        self._insert_rebalance(date(2024, 7, 22))
+        self._write_sleeve_daily(date(2024, 1, 1), date(2024, 7, 19))
+        self._insert_watermarks(date(2024, 7, 22))
+
+        result = self.service.run_bootstrap(
+            "derived.etf_aw_rebalance_snapshot.build",
+            start=date(2024, 7, 1),
+            end=date(2024, 7, 31),
+        )
+
+        self.assertEqual(result["status"], RunStatus.SUCCESS.value)
+        frame = self._read_snapshot_file(2024, 7)
+        self.assertEqual(set(frame["data_status"]), {"stale"})
+        equity = frame[frame["sleeve_code"] == "510300.SH"].iloc[0]
+        self.assertEqual(equity["source_max_trade_date"], date(2024, 7, 19))
+        self.assertIn("source_lag", equity["quality_notes"])
+
     def test_repeat_run_upserts_without_duplicate_business_keys(self) -> None:
         self._insert_rebalance(date(2024, 7, 22))
         self._write_sleeve_daily(date(2024, 1, 1), date(2024, 7, 22))

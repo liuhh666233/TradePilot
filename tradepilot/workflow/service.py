@@ -513,7 +513,12 @@ class DailyWorkflowService:
         return get_latest_etf_aw_snapshot(as_of_date=as_of_date)
 
     def build_context_payload(self, run: WorkflowRunRecord) -> WorkflowContextPayload:
-        """Convert one workflow run into the stage-1 context contract."""
+        """Convert one workflow run into the stage-1 context contract.
+
+        ETF all-weather context is selected by workflow date, not by workflow
+        run id. It returns the latest rebalance snapshot at or before the run's
+        workflow_date.
+        """
         summary = run.summary
         etf_aw_context = get_latest_etf_aw_snapshot(
             as_of_date=date.fromisoformat(run.workflow_date)

@@ -129,10 +129,10 @@ def _snapshot_months(
 def _snapshot_contract(frame: pd.DataFrame) -> dict[str, Any]:
     ordered = frame.sort_values(["sleeve_role", "sleeve_code"]).copy()
     statuses = set(ordered["data_status"].dropna().astype(str).tolist())
-    if "missing" in statuses:
-        status = "missing"
-    elif "stale" in statuses:
+    if "stale" in statuses:
         status = "stale"
+    elif "missing" in statuses:
+        status = "missing"
     elif "partial" in statuses:
         status = "partial"
     else:

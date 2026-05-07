@@ -1468,6 +1468,9 @@ class ETLService:
             panel["trade_date"], errors="coerce"
         ).dt.date
         panel = panel.sort_values(["sleeve_code", "trade_date"]).reset_index(drop=True)
+        panel_max_trade_date = (
+            max(panel["trade_date"].dropna().tolist()) if not panel.empty else None
+        )
         rows: list[dict[str, Any]] = []
         ingested_at = _utc_now()
         for _, rebalance_row in rebalance.iterrows():
@@ -1483,6 +1486,7 @@ class ETLService:
                             == str(sleeve["sleeve_code"])
                         ],
                         rebalance_date=rebalance_date,
+                        panel_max_trade_date=panel_max_trade_date,
                         watermarks=watermarks,
                         ingested_at=ingested_at,
                     )
@@ -1514,12 +1518,13 @@ class ETLService:
         sleeve_role: str,
         sleeve_panel: pd.DataFrame,
         rebalance_date: date,
+        panel_max_trade_date: date | None,
         watermarks: dict[str, date | None],
         ingested_at: datetime,
     ) -> dict[str, Any]:
         available = sleeve_panel[sleeve_panel["trade_date"] <= rebalance_date].copy()
         source_max_trade_date = (
-            max(available["trade_date"].tolist()) if not available.empty else None
+            max(sleeve_panel["trade_date"].tolist()) if not sleeve_panel.empty else None
         )
         target = available[available["trade_date"] == rebalance_date]
         row = {
@@ -1571,7 +1576,36 @@ class ETLService:
             )
             if watermarks.get(dataset) is None or watermarks[dataset] < rebalance_date
         ]
-        if core_missing:
+        source_lagged = (
+            panel_max_trade_date is None or panel_max_trade_date < rebalance_date
+        )
+        if source_lagged:
+            notes["source_lag"] = {
+                "panel_max_trade_date": (
+                    panel_max_trade_date.isoformat()
+                    if panel_max_trade_date is not None
+                    else None
+                ),
+                "rebalance_date": rebalance_date.isoformat(),
+            }
+        if stale_sources:
+            notes["stale_sources"] = stale_sources
+
+        if stale_sources or source_lagged:
+            row["data_status"] = "stale"
+            if not core_missing:
+                features, partial_reasons = _snapshot_features(available)
+                row.update(features)
+                notes["window_observations"] = {
+                    key: value["observations"] for key, value in partial_reasons.items()
+                }
+                if any(value["partial"] for value in partial_reasons.values()):
+                    notes["partial_features"] = [
+                        key
+                        for key, value in partial_reasons.items()
+                        if value["partial"]
+                    ]
+        elif core_missing:
             notes["missing_reason"] = "rebalance_date row or core price fields missing"
             row["data_status"] = "missing"
         else:
@@ -1580,10 +1614,7 @@ class ETLService:
             notes["window_observations"] = {
                 key: value["observations"] for key, value in partial_reasons.items()
             }
-            if stale_sources:
-                row["data_status"] = "stale"
-                notes["stale_sources"] = stale_sources
-            elif any(value["partial"] for value in partial_reasons.values()):
+            if any(value["partial"] for value in partial_reasons.values()):
                 row["data_status"] = "partial"
                 notes["partial_features"] = [
                     key for key, value in partial_reasons.items() if value["partial"]

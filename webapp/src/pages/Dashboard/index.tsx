@@ -12,6 +12,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
 } from "antd";
 import OvernightNewsTabs, { newsDirectionColor, newsDirectionLabel } from "./OvernightNewsTabs";
@@ -27,6 +28,7 @@ import {
   getWorkflowStatus,
   runPostMarketWorkflow,
   runPreMarketWorkflow,
+  type EtfAwSleeveSnapshot,
   type EtfAwSnapshotContext,
   type WorkflowContextPayload,
   type WorkflowInsightResponse,
@@ -68,6 +70,39 @@ function stepStatusColor(status?: string) {
 
 function formatPercent(value?: number | null) {
   return typeof value === "number" ? `${(value * 100).toFixed(2)}%` : "-";
+}
+
+function formatQualityValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.join(" / ");
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, entry]) => `${key}: ${formatQualityValue(entry)}`)
+      .join("；");
+  }
+  return value == null || value === "" ? "-" : String(value);
+}
+
+function etfAwDiagnostics(row: EtfAwSleeveSnapshot): string[] {
+  const notes = row.quality_notes || {};
+  const diagnostics: string[] = [];
+  if (notes.stale_sources) {
+    diagnostics.push(`stale: ${formatQualityValue(notes.stale_sources)}`);
+  }
+  if (notes.source_lag) {
+    diagnostics.push(`lag: ${formatQualityValue(notes.source_lag)}`);
+  }
+  if (notes.partial_features) {
+    diagnostics.push(`partial: ${formatQualityValue(notes.partial_features)}`);
+  }
+  if (notes.window_observations) {
+    diagnostics.push(`obs: ${formatQualityValue(notes.window_observations)}`);
+  }
+  if (notes.missing_reason) {
+    diagnostics.push(`missing: ${formatQualityValue(notes.missing_reason)}`);
+  }
+  return diagnostics;
 }
 
 function getOverviewText(context: WorkflowContextPayload | null, workflow?: WorkflowRunResponse | null) {
@@ -402,6 +437,21 @@ export default function Dashboard() {
             { title: "3M 波动", dataIndex: "volatility_3m", key: "volatility_3m", render: formatPercent },
             { title: "6M 回撤", dataIndex: "max_drawdown_6m", key: "max_drawdown_6m", render: formatPercent },
             { title: "状态", dataIndex: "data_status", key: "data_status", render: (value: string) => <Tag color={statusColor(value)}>{value}</Tag> },
+            {
+              title: "诊断",
+              key: "quality_notes",
+              render: (_: unknown, row: EtfAwSleeveSnapshot) => {
+                const diagnostics = etfAwDiagnostics(row);
+                if (diagnostics.length === 0) {
+                  return <Text type="secondary">-</Text>;
+                }
+                return (
+                  <Tooltip title={diagnostics.join("；")}>
+                    <Text type="secondary">{diagnostics[0]}</Text>
+                  </Tooltip>
+                );
+              },
+            },
           ]}
         />
       </Space>
