@@ -62,6 +62,11 @@ _ETF_AW_SLEEVES_PROFILE = "reference.etf_aw_sleeves.frozen_v1"
 _ETF_AW_SLEEVE_DAILY_PROFILE = "derived.etf_aw_sleeve_daily.build"
 _ETF_AW_REBALANCE_SNAPSHOT_PROFILE = "derived.etf_aw_rebalance_snapshot.build"
 _ETF_AW_REBALANCE_SNAPSHOT_DATASET = "derived.etf_aw_rebalance_snapshot"
+_ETF_AW_REGIME_SCORE_PROFILE = "derived.etf_aw_regime_score.build"
+_ETF_AW_REGIME_SCORE_DATASET = "derived.etf_aw_regime_score"
+_ETF_AW_REGIME_SCHEMA_VERSION = "etf_aw_regime_score_v1"
+_ETF_AW_REGIME_SCORER_NAME = "etf_aw_market_only_regime"
+_ETF_AW_REGIME_SCORER_VERSION = "v1"
 _ETF_AW_SNAPSHOT_LOOKBACK_DAYS = 420
 _ETF_AW_SNAPSHOT_WINDOWS = {
     "return_1m": (21, 15),
@@ -71,6 +76,20 @@ _ETF_AW_SNAPSHOT_WINDOWS = {
     "max_drawdown_6m": (126, 90),
 }
 _ETF_AW_SNAPSHOT_STATUSES = {"complete", "partial", "missing", "stale"}
+_ETF_AW_REGIME_STATUSES = {"complete", "degraded", "unavailable"}
+_ETF_AW_REGIME_LABELS = {
+    "risk_on",
+    "defensive",
+    "hedge_bid",
+    "mixed",
+    "insufficient_data",
+}
+_ETF_AW_REQUIRED_ROLES = {"equity_large", "equity_small", "bond", "gold", "cash"}
+_ETF_AW_DIRECTION_RULES = {
+    "return_1m": (0.015, -0.015, 0.25),
+    "return_3m": (0.030, -0.030, 0.45),
+    "return_6m": (0.050, -0.050, 0.30),
+}
 _ETF_AW_SLEEVES: list[dict[str, Any]] = [
     {
         "sleeve_code": "510300.SH",
@@ -334,6 +353,11 @@ class ETLService:
             )
         if profile_name == _ETF_AW_REBALANCE_SNAPSHOT_PROFILE:
             return self._build_etf_aw_rebalance_snapshot(
+                start or _TRADING_CALENDAR_HISTORY_START,
+                end or date.today(),
+            )
+        if profile_name == _ETF_AW_REGIME_SCORE_PROFILE:
+            return self._build_etf_aw_regime_score(
                 start or _TRADING_CALENDAR_HISTORY_START,
                 end or date.today(),
             )
@@ -1274,6 +1298,13 @@ class ETLService:
             frame = frame[
                 frame["trade_date"].between(start, end, inclusive="both")
             ].copy()
+        if "rebalance_date" in frame.columns:
+            frame["rebalance_date"] = pd.to_datetime(
+                frame["rebalance_date"], errors="coerce"
+            ).dt.date
+            frame = frame[
+                frame["rebalance_date"].between(start, end, inclusive="both")
+            ].copy()
         return frame
 
     def _make_etf_aw_sleeve_daily_frame(
@@ -1636,6 +1667,89 @@ class ETLService:
                 "calendar_name",
                 "rebalance_date",
                 "sleeve_code",
+                "ingested_at",
+            ),
+            partition_date_column="rebalance_date",
+        )
+
+    def _build_etf_aw_regime_score(self, start: date, end: date) -> dict:
+        start, end = _ordered_dates(start, end)
+        snapshot = self._read_partitioned_dataset(
+            _ETF_AW_REBALANCE_SNAPSHOT_DATASET,
+            start,
+            end,
+            StorageZone.DERIVED,
+        )
+        if snapshot.empty:
+            return {
+                "profile_name": _ETF_AW_REGIME_SCORE_PROFILE,
+                "dataset_name": _ETF_AW_REGIME_SCORE_DATASET,
+                "status": RunStatus.FAILED.value,
+                "requested_start": start.isoformat(),
+                "requested_end": end.isoformat(),
+                "records_written": 0,
+                "error_message": "ETF all-weather rebalance snapshot is missing",
+            }
+        score = self._make_etf_aw_regime_score_frame(snapshot)
+        validation = _validate_regime_score_frame(score)
+        if not all(validation.values()):
+            return {
+                "profile_name": _ETF_AW_REGIME_SCORE_PROFILE,
+                "dataset_name": _ETF_AW_REGIME_SCORE_DATASET,
+                "status": RunStatus.FAILED.value,
+                "requested_start": start.isoformat(),
+                "requested_end": end.isoformat(),
+                "records_written": 0,
+                "validation": validation,
+                "error_message": "ETF all-weather regime score validation failed",
+            }
+        write_result = self._write_etf_aw_regime_score(score)
+        return {
+            "profile_name": _ETF_AW_REGIME_SCORE_PROFILE,
+            "dataset_name": _ETF_AW_REGIME_SCORE_DATASET,
+            "status": RunStatus.SUCCESS.value,
+            "requested_start": start.isoformat(),
+            "requested_end": end.isoformat(),
+            "records_written": write_result.records_written,
+            "records_inserted": write_result.records_inserted,
+            "records_updated": write_result.records_updated,
+            "partitions_written": write_result.partitions_written,
+            "storage_paths": write_result.storage_paths,
+            "validation": validation,
+            "scoring_status_counts": score["scoring_status"].value_counts().to_dict(),
+            "label_counts": score["market_regime_label"].value_counts().to_dict(),
+        }
+
+    def _make_etf_aw_regime_score_frame(self, snapshot: pd.DataFrame) -> pd.DataFrame:
+        frame = snapshot.copy()
+        frame["rebalance_date"] = pd.to_datetime(
+            frame["rebalance_date"], errors="coerce"
+        ).dt.date
+        rows: list[dict[str, Any]] = []
+        ingested_at = _utc_now()
+        group_columns = ["calendar_name", "rebalance_date"]
+        for _, group in frame.groupby(group_columns, sort=True):
+            rows.append(_regime_score_row(group, ingested_at))
+        return pd.DataFrame(rows)
+
+    def _write_etf_aw_regime_score(
+        self, canonical: pd.DataFrame
+    ) -> CanonicalWriteResult:
+        return self._write_year_month_partition_upsert(
+            dataset_name=_ETF_AW_REGIME_SCORE_DATASET,
+            zone=StorageZone.DERIVED,
+            canonical=canonical,
+            key_columns=(
+                "calendar_name",
+                "rebalance_date",
+                "scorer_name",
+                "scorer_version",
+            ),
+            sort_columns=(
+                "calendar_name",
+                "rebalance_date",
+                "scorer_name",
+                "scorer_version",
                 "ingested_at",
             ),
             partition_date_column="rebalance_date",
@@ -2223,6 +2337,311 @@ def _validate_rebalance_snapshot_frame(
         ),
         "complete_rows_have_features": complete_has_features,
     }
+
+
+def _regime_score_row(group: pd.DataFrame, ingested_at: datetime) -> dict[str, Any]:
+    ordered = group.sort_values(["sleeve_role", "sleeve_code"]).copy()
+    first = ordered.iloc[0]
+    signals = [_sleeve_signal(row) for _, row in ordered.iterrows()]
+    role_scores = {
+        signal["sleeve_role"]: signal["direction_score"] for signal in signals
+    }
+    equity_score = _average_scores(
+        [role_scores.get("equity_large"), role_scores.get("equity_small")]
+    )
+    bond_score = float(role_scores.get("bond") or 0.0)
+    gold_score = float(role_scores.get("gold") or 0.0)
+    cash_score = float(role_scores.get("cash") or 0.0)
+    market_score = _clamp(
+        0.70 * equity_score - 0.15 * max(bond_score, 0.0) - 0.15 * max(gold_score, 0.0),
+        -100.0,
+        100.0,
+    )
+    confidence_cap, scoring_status, cap_reasons = _regime_confidence_cap(ordered)
+    label = _regime_label(
+        scoring_status=scoring_status,
+        equity_score=equity_score,
+        bond_score=bond_score,
+        cash_score=cash_score,
+        gold_score=gold_score,
+        market_score=market_score,
+    )
+    agreement_score = _agreement_score(label, signals)
+    strength_score = min(abs(market_score) / 100.0, 1.0)
+    drawdown_penalty = _drawdown_penalty(signals)
+    volatility_penalty = _volatility_penalty(signals)
+    raw_confidence = (
+        0.35
+        + 0.35 * agreement_score
+        + 0.30 * strength_score
+        - drawdown_penalty
+        - volatility_penalty
+    )
+    confidence_score = min(confidence_cap, max(raw_confidence, 0.0))
+    quality_notes = {
+        "market_only": True,
+        "macro_inputs_available": False,
+        "rates_inputs_available": False,
+        "confidence_cap_reasons": cap_reasons,
+        "agreement_score": agreement_score,
+        "strength_score": strength_score,
+        "drawdown_penalty": drawdown_penalty,
+        "volatility_penalty": volatility_penalty,
+        "input_data_status_counts": ordered["data_status"].value_counts().to_dict(),
+    }
+    return {
+        "schema_version": _ETF_AW_REGIME_SCHEMA_VERSION,
+        "calendar_name": str(first["calendar_name"]),
+        "calendar_month": str(first["calendar_month"]),
+        "rebalance_date": first["rebalance_date"],
+        "scorer_name": _ETF_AW_REGIME_SCORER_NAME,
+        "scorer_version": _ETF_AW_REGIME_SCORER_VERSION,
+        "input_snapshot_status": _snapshot_status_from_rows(ordered),
+        "scoring_status": scoring_status,
+        "market_regime_label": label,
+        "market_score": market_score,
+        "confidence_score": confidence_score,
+        "confidence_level": _confidence_level(confidence_score),
+        "confidence_cap": confidence_cap,
+        "signal_summary": _signal_summary(label, scoring_status),
+        "signals_json": json.dumps(signals, sort_keys=True),
+        "quality_notes": json.dumps(quality_notes, sort_keys=True),
+        "source_snapshot_rebalance_date": first["rebalance_date"],
+        "ingested_at": ingested_at,
+    }
+
+
+def _sleeve_signal(row: pd.Series) -> dict[str, Any]:
+    direction_score = 0.0
+    metric_signals: dict[str, int | None] = {}
+    for metric, (positive, negative, weight) in _ETF_AW_DIRECTION_RULES.items():
+        signal = _metric_signal(row.get(metric), positive, negative)
+        metric_signals[metric] = signal
+        if signal is not None:
+            direction_score += weight * signal
+    return {
+        "sleeve_code": str(row["sleeve_code"]),
+        "sleeve_role": str(row["sleeve_role"]),
+        "direction_score": float(direction_score),
+        "metric_signals": metric_signals,
+        "return_1m": _nullable_float(row.get("return_1m")),
+        "return_3m": _nullable_float(row.get("return_3m")),
+        "return_6m": _nullable_float(row.get("return_6m")),
+        "volatility_3m": _nullable_float(row.get("volatility_3m")),
+        "max_drawdown_6m": _nullable_float(row.get("max_drawdown_6m")),
+        "data_status": str(row["data_status"]),
+    }
+
+
+def _metric_signal(
+    value: object, positive_threshold: float, negative_threshold: float
+) -> int | None:
+    number = _nullable_float(value)
+    if number is None:
+        return None
+    if number >= positive_threshold:
+        return 100
+    if number <= negative_threshold:
+        return -100
+    return 0
+
+
+def _average_scores(values: list[float | None]) -> float:
+    available = [float(value) for value in values if value is not None]
+    if not available:
+        return 0.0
+    return sum(available) / len(available)
+
+
+def _regime_confidence_cap(frame: pd.DataFrame) -> tuple[float, str, list[str]]:
+    statuses = set(frame["data_status"].dropna().astype(str).tolist())
+    roles = set(frame["sleeve_role"].dropna().astype(str).tolist())
+    if len(frame) < len(_ETF_AW_SLEEVE_CODES) or not _ETF_AW_REQUIRED_ROLES.issubset(
+        roles
+    ):
+        return 0.20, "unavailable", ["frozen_sleeve_rows_incomplete"]
+    if "missing" in statuses:
+        return 0.20, "unavailable", ["missing_sleeve_data"]
+    if "stale" in statuses:
+        return 0.35, "degraded", ["stale_sleeve_data"]
+    if "partial" in statuses:
+        return 0.55, "degraded", ["partial_sleeve_data"]
+    return 0.70, "complete", ["market_only_inputs"]
+
+
+def _regime_label(
+    *,
+    scoring_status: str,
+    equity_score: float,
+    bond_score: float,
+    cash_score: float,
+    gold_score: float,
+    market_score: float,
+) -> str:
+    if scoring_status == "unavailable":
+        return "insufficient_data"
+    if gold_score >= 45 and gold_score - equity_score >= 40:
+        return "hedge_bid"
+    if equity_score <= -35 and (bond_score >= 0 or cash_score >= 0):
+        return "defensive"
+    if equity_score >= 35 and market_score >= 25:
+        return "risk_on"
+    return "mixed"
+
+
+def _agreement_score(label: str, signals: list[dict[str, Any]]) -> float:
+    if label == "mixed":
+        return 0.25
+    if label == "insufficient_data":
+        return 0.0
+    available = [signal for signal in signals if _signal_available(signal)]
+    if not available:
+        return 0.0
+    consistent = 0
+    for signal in available:
+        role = str(signal["sleeve_role"])
+        score = float(signal["direction_score"])
+        if label == "risk_on" and role in {"equity_large", "equity_small"}:
+            consistent += int(score > 0)
+        elif label == "defensive":
+            consistent += int(
+                (role in {"equity_large", "equity_small"} and score < 0)
+                or (role in {"bond", "cash"} and score >= 0)
+            )
+        elif label == "hedge_bid":
+            consistent += int(
+                (role == "gold" and score > 0)
+                or (role in {"equity_large", "equity_small"} and score <= 0)
+            )
+    return consistent / len(available)
+
+
+def _signal_available(signal: dict[str, Any]) -> bool:
+    if signal["data_status"] == "missing":
+        return False
+    metric_signals = signal.get("metric_signals", {})
+    return any(value is not None for value in metric_signals.values())
+
+
+def _drawdown_penalty(signals: list[dict[str, Any]]) -> float:
+    drawdowns = [
+        float(signal["max_drawdown_6m"])
+        for signal in signals
+        if signal.get("max_drawdown_6m") is not None and _signal_available(signal)
+    ]
+    if any(value <= -0.12 for value in drawdowns):
+        return 0.15
+    if any(value <= -0.08 for value in drawdowns):
+        return 0.08
+    return 0.0
+
+
+def _volatility_penalty(signals: list[dict[str, Any]]) -> float:
+    for signal in signals:
+        if not _signal_available(signal) or signal.get("volatility_3m") is None:
+            continue
+        role = str(signal["sleeve_role"])
+        volatility = float(signal["volatility_3m"])
+        if role in {"equity_large", "equity_small"} and volatility >= 0.28:
+            return 0.10
+        if role not in {"equity_large", "equity_small"} and volatility >= 0.18:
+            return 0.10
+    return 0.0
+
+
+def _snapshot_status_from_rows(frame: pd.DataFrame) -> str:
+    statuses = set(frame["data_status"].dropna().astype(str).tolist())
+    if "stale" in statuses:
+        return "stale"
+    if "missing" in statuses:
+        return "missing"
+    if "partial" in statuses:
+        return "partial"
+    return "complete"
+
+
+def _confidence_level(confidence_score: float) -> str:
+    if confidence_score < 0.35:
+        return "low"
+    if confidence_score < 0.60:
+        return "medium"
+    return "high"
+
+
+def _signal_summary(label: str, scoring_status: str) -> str:
+    if label == "insufficient_data":
+        return "ETF all-weather market-only regime score is unavailable."
+    if scoring_status == "degraded":
+        return f"ETF all-weather market-only label is {label} with degraded inputs."
+    return f"ETF all-weather market-only label is {label}."
+
+
+def _validate_regime_score_frame(frame: pd.DataFrame) -> dict[str, bool]:
+    """Validate the minimum contract for ETF all-weather regime score rows."""
+
+    if frame.empty:
+        return {
+            "non_empty": False,
+            "no_duplicate_business_keys": False,
+            "schema_version_supported": False,
+            "scoring_status_allowed": False,
+            "label_allowed": False,
+            "market_score_finite": False,
+            "market_score_in_range": False,
+            "confidence_score_finite": False,
+            "confidence_score_capped": False,
+            "confidence_cap_valid": False,
+            "json_fields_valid": False,
+            "no_budget_weight_trade_fields": False,
+        }
+    duplicate_count = int(
+        frame.duplicated(
+            ["calendar_name", "rebalance_date", "scorer_name", "scorer_version"]
+        ).sum()
+    )
+    market_scores = [_nullable_float(value) for value in frame["market_score"]]
+    confidence_scores = [_nullable_float(value) for value in frame["confidence_score"]]
+    confidence_caps = [_nullable_float(value) for value in frame["confidence_cap"]]
+    blocked_fields = {
+        column
+        for column in frame.columns
+        if any(token in column for token in ("budget", "weight", "trade_action"))
+    }
+    return {
+        "non_empty": True,
+        "no_duplicate_business_keys": duplicate_count == 0,
+        "schema_version_supported": set(frame["schema_version"].astype(str))
+        == {_ETF_AW_REGIME_SCHEMA_VERSION},
+        "scoring_status_allowed": set(frame["scoring_status"].astype(str)).issubset(
+            _ETF_AW_REGIME_STATUSES
+        ),
+        "label_allowed": set(frame["market_regime_label"].astype(str)).issubset(
+            _ETF_AW_REGIME_LABELS
+        ),
+        "market_score_finite": all(value is not None for value in market_scores),
+        "market_score_in_range": all(
+            value is not None and -100 <= value <= 100 for value in market_scores
+        ),
+        "confidence_score_finite": all(
+            value is not None for value in confidence_scores
+        ),
+        "confidence_score_capped": all(
+            score is not None and cap is not None and 0 <= score <= cap
+            for score, cap in zip(confidence_scores, confidence_caps, strict=True)
+        ),
+        "confidence_cap_valid": all(
+            cap in {0.0, 0.20, 0.35, 0.55, 0.70} for cap in confidence_caps
+        ),
+        "json_fields_valid": all(
+            _is_json_text(row["signals_json"]) and _is_json_text(row["quality_notes"])
+            for _, row in frame.iterrows()
+        ),
+        "no_budget_weight_trade_fields": not blocked_fields,
+    }
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
 
 
 def _nullable_float(value: object) -> float | None:
