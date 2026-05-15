@@ -153,6 +153,103 @@ class StageERegimeScoreTests(unittest.TestCase):
         self.assertEqual(row["market_regime_label"], "insufficient_data")
         self.assertLessEqual(row["confidence_score"], 0.20)
 
+    def test_duplicate_role_rows_are_averaged_not_overwritten(self) -> None:
+        self._write_snapshot(
+            [
+                self._row("510300.SH", "equity_large", 0.02, 0.04, 0.06),
+                self._row("510301.SH", "equity_large", -0.02, -0.04, -0.06),
+                self._row("159845.SZ", "equity_small", 0.02, 0.04, 0.06),
+                self._row("511010.SH", "bond", -0.02, -0.04, -0.06),
+                self._row("518850.SH", "gold", -0.02, -0.04, -0.06),
+                self._row("159001.SZ", "cash", 0.0, 0.0, 0.0),
+            ]
+        )
+
+        self.service.run_bootstrap(
+            "derived.etf_aw_regime_score.build",
+            start=date(2024, 7, 1),
+            end=date(2024, 7, 31),
+        )
+
+        frame = self._read_score_file(2024, 7)
+        row = frame.iloc[0]
+        self.assertEqual(row["market_regime_label"], "risk_on")
+        self.assertEqual(row["market_score"], 35.0)
+
+    def test_missing_metric_is_not_scored_as_neutral(self) -> None:
+        self._write_snapshot(
+            [
+                self._row("510300.SH", "equity_large", 0.02, None, None, "partial"),
+                self._row("159845.SZ", "equity_small", 0.02, None, None, "partial"),
+                self._row("511010.SH", "bond", -0.02, -0.04, -0.06),
+                self._row("518850.SH", "gold", -0.02, -0.04, -0.06),
+                self._row("159001.SZ", "cash", 0.0, 0.0, 0.0),
+            ]
+        )
+
+        self.service.run_bootstrap(
+            "derived.etf_aw_regime_score.build",
+            start=date(2024, 7, 1),
+            end=date(2024, 7, 31),
+        )
+
+        row = self._read_score_file(2024, 7).iloc[0]
+        signals = {
+            signal["sleeve_role"]: signal for signal in json.loads(row["signals_json"])
+        }
+        self.assertEqual(row["market_regime_label"], "risk_on")
+        self.assertEqual(signals["equity_large"]["direction_score"], 100.0)
+        self.assertEqual(signals["equity_small"]["direction_score"], 100.0)
+        self.assertLessEqual(row["confidence_score"], 0.55)
+
+    def test_role_with_no_metrics_does_not_count_as_stable_zero(self) -> None:
+        self._write_snapshot(
+            [
+                self._row("510300.SH", "equity_large", -0.02, -0.04, -0.06),
+                self._row("159845.SZ", "equity_small", -0.02, -0.04, -0.06),
+                self._row("511010.SH", "bond", None, None, None, "partial"),
+                self._row("518850.SH", "gold", -0.02, -0.04, -0.06),
+                self._row("159001.SZ", "cash", None, None, None, "partial"),
+            ]
+        )
+
+        self.service.run_bootstrap(
+            "derived.etf_aw_regime_score.build",
+            start=date(2024, 7, 1),
+            end=date(2024, 7, 31),
+        )
+
+        row = self._read_score_file(2024, 7).iloc[0]
+        signals = {
+            signal["sleeve_role"]: signal for signal in json.loads(row["signals_json"])
+        }
+        self.assertEqual(row["market_regime_label"], "mixed")
+        self.assertIsNone(signals["bond"]["direction_score"])
+        self.assertIsNone(signals["cash"]["direction_score"])
+
+    def test_missing_status_takes_priority_over_stale_and_partial(self) -> None:
+        self._write_snapshot(
+            [
+                self._row("510300.SH", "equity_large", 0.02, 0.04, 0.06, "stale"),
+                self._row("159845.SZ", "equity_small", 0.02, 0.04, 0.06),
+                self._row("511010.SH", "bond", 0.0, 0.0, 0.0, "partial"),
+                self._row("518850.SH", "gold", None, None, None, "missing"),
+                self._row("159001.SZ", "cash", 0.0, 0.0, 0.0),
+            ]
+        )
+
+        self.service.run_bootstrap(
+            "derived.etf_aw_regime_score.build",
+            start=date(2024, 7, 1),
+            end=date(2024, 7, 31),
+        )
+
+        row = self._read_score_file(2024, 7).iloc[0]
+        self.assertEqual(row["input_snapshot_status"], "missing")
+        self.assertEqual(row["scoring_status"], "unavailable")
+        self.assertEqual(row["market_regime_label"], "insufficient_data")
+        self.assertEqual(row["confidence_cap"], 0.20)
+
     def test_stale_and_partial_inputs_cap_confidence(self) -> None:
         self._write_snapshot(
             [

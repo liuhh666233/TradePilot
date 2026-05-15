@@ -2343,17 +2343,24 @@ def _regime_score_row(group: pd.DataFrame, ingested_at: datetime) -> dict[str, A
     ordered = group.sort_values(["sleeve_role", "sleeve_code"]).copy()
     first = ordered.iloc[0]
     signals = [_sleeve_signal(row) for _, row in ordered.iterrows()]
-    role_scores = {
-        signal["sleeve_role"]: signal["direction_score"] for signal in signals
-    }
+    role_scores: dict[str, list[float | None]] = {}
+    for signal in signals:
+        role_scores.setdefault(str(signal["sleeve_role"]), []).append(
+            signal["direction_score"]
+        )
     equity_score = _average_scores(
-        [role_scores.get("equity_large"), role_scores.get("equity_small")]
+        [
+            _average_scores(role_scores.get("equity_large", [])),
+            _average_scores(role_scores.get("equity_small", [])),
+        ]
     )
-    bond_score = float(role_scores.get("bond") or 0.0)
-    gold_score = float(role_scores.get("gold") or 0.0)
-    cash_score = float(role_scores.get("cash") or 0.0)
+    bond_score = _average_scores(role_scores.get("bond", []))
+    gold_score = _average_scores(role_scores.get("gold", []))
+    cash_score = _average_scores(role_scores.get("cash", []))
     market_score = _clamp(
-        0.70 * equity_score - 0.15 * max(bond_score, 0.0) - 0.15 * max(gold_score, 0.0),
+        0.70 * _score_value(equity_score)
+        - 0.15 * max(_score_value(bond_score), 0.0)
+        - 0.15 * max(_score_value(gold_score), 0.0),
         -100.0,
         100.0,
     )
@@ -2413,16 +2420,25 @@ def _regime_score_row(group: pd.DataFrame, ingested_at: datetime) -> dict[str, A
 
 def _sleeve_signal(row: pd.Series) -> dict[str, Any]:
     direction_score = 0.0
+    available_weight = 0.0
     metric_signals: dict[str, int | None] = {}
     for metric, (positive, negative, weight) in _ETF_AW_DIRECTION_RULES.items():
         signal = _metric_signal(row.get(metric), positive, negative)
         metric_signals[metric] = signal
         if signal is not None:
             direction_score += weight * signal
+            available_weight += weight
+    normalized_direction_score = (
+        direction_score / available_weight if available_weight > 0 else None
+    )
     return {
         "sleeve_code": str(row["sleeve_code"]),
         "sleeve_role": str(row["sleeve_role"]),
-        "direction_score": float(direction_score),
+        "direction_score": (
+            float(normalized_direction_score)
+            if normalized_direction_score is not None
+            else None
+        ),
         "metric_signals": metric_signals,
         "return_1m": _nullable_float(row.get("return_1m")),
         "return_3m": _nullable_float(row.get("return_3m")),
@@ -2446,11 +2462,15 @@ def _metric_signal(
     return 0
 
 
-def _average_scores(values: list[float | None]) -> float:
+def _average_scores(values: list[float | None]) -> float | None:
     available = [float(value) for value in values if value is not None]
     if not available:
-        return 0.0
+        return None
     return sum(available) / len(available)
+
+
+def _score_value(value: float | None) -> float:
+    return float(value) if value is not None else 0.0
 
 
 def _regime_confidence_cap(frame: pd.DataFrame) -> tuple[float, str, list[str]]:
@@ -2472,19 +2492,31 @@ def _regime_confidence_cap(frame: pd.DataFrame) -> tuple[float, str, list[str]]:
 def _regime_label(
     *,
     scoring_status: str,
-    equity_score: float,
-    bond_score: float,
-    cash_score: float,
-    gold_score: float,
+    equity_score: float | None,
+    bond_score: float | None,
+    cash_score: float | None,
+    gold_score: float | None,
     market_score: float,
 ) -> str:
     if scoring_status == "unavailable":
         return "insufficient_data"
-    if gold_score >= 45 and gold_score - equity_score >= 40:
+    if (
+        gold_score is not None
+        and equity_score is not None
+        and gold_score >= 45
+        and gold_score - equity_score >= 40
+    ):
         return "hedge_bid"
-    if equity_score <= -35 and (bond_score >= 0 or cash_score >= 0):
+    if (
+        equity_score is not None
+        and equity_score <= -35
+        and (
+            (bond_score is not None and bond_score >= 0)
+            or (cash_score is not None and cash_score >= 0)
+        )
+    ):
         return "defensive"
-    if equity_score >= 35 and market_score >= 25:
+    if equity_score is not None and equity_score >= 35 and market_score >= 25:
         return "risk_on"
     return "mixed"
 
@@ -2519,6 +2551,8 @@ def _agreement_score(label: str, signals: list[dict[str, Any]]) -> float:
 def _signal_available(signal: dict[str, Any]) -> bool:
     if signal["data_status"] == "missing":
         return False
+    if signal.get("direction_score") is None:
+        return False
     metric_signals = signal.get("metric_signals", {})
     return any(value is not None for value in metric_signals.values())
 
@@ -2551,10 +2585,10 @@ def _volatility_penalty(signals: list[dict[str, Any]]) -> float:
 
 def _snapshot_status_from_rows(frame: pd.DataFrame) -> str:
     statuses = set(frame["data_status"].dropna().astype(str).tolist())
-    if "stale" in statuses:
-        return "stale"
     if "missing" in statuses:
         return "missing"
+    if "stale" in statuses:
+        return "stale"
     if "partial" in statuses:
         return "partial"
     return "complete"
