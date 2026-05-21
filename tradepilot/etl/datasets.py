@@ -298,6 +298,30 @@ def build_derived_etf_aw_rebalance_snapshot_dataset() -> DatasetDefinition:
     )
 
 
+def build_derived_etf_aw_regime_score_dataset() -> DatasetDefinition:
+    """Return the ETF all-weather market-only regime score definition."""
+
+    return DatasetDefinition(
+        dataset_name="derived.etf_aw_regime_score",
+        category=DatasetCategory.DERIVED,
+        grain="calendar_rebalance_scorer",
+        primary_source="derived",
+        storage_zone=StorageZone.DERIVED,
+        partition_strategy="year_month",
+        canonical_schema_name="etf_aw_regime_score_v1",
+        timing_semantics=(
+            "Market-only regime score built from the ETF all-weather rebalance "
+            "snapshot; it is not a macro regime classifier or allocation model."
+        ),
+        validation_rule_names=[
+            "regime_score.duplicate_business_key",
+            "regime_score.status_allowed",
+            "regime_score.confidence_capped",
+        ],
+        dependencies=["derived.etf_aw_rebalance_snapshot"],
+    )
+
+
 def build_market_index_daily_dataset() -> DatasetDefinition:
     """Return the Stage B index daily dataset definition."""
 
@@ -347,4 +371,5 @@ def build_stage_b_datasets() -> list[DatasetDefinition]:
         build_market_index_daily_dataset(),
         build_derived_etf_aw_sleeve_daily_dataset(),
         build_derived_etf_aw_rebalance_snapshot_dataset(),
+        build_derived_etf_aw_regime_score_dataset(),
     ]
