@@ -331,6 +331,73 @@ class StageERegimeScoreTests(unittest.TestCase):
         self.assertNotIn("target_weight", context)
         self.assertNotIn("trade_action", context)
 
+    def test_invalid_rebalance_date_is_ignored_by_read_service(self) -> None:
+        path = self._score_file_path(2024, 7)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        row = self._score_row(rebalance_date="bad-date", ingested_at="2024-07-22")
+        pd.DataFrame([row]).to_parquet(path, index=False)
+
+        context = get_latest_etf_aw_regime_context(
+            as_of_date=date(2024, 7, 31),
+            lakehouse_root=self.lakehouse_root,
+        )
+
+        self.assertIsNone(context)
+
+    def test_read_service_uses_latest_ingested_at_for_same_rebalance_date(self) -> None:
+        path = self._score_file_path(2024, 7)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        early = self._score_row(
+            label="risk_on",
+            scorer_name="z_scorer",
+            ingested_at="2024-07-22 09:00:00",
+        )
+        late = self._score_row(
+            label="defensive",
+            scorer_name="a_scorer",
+            ingested_at="2024-07-22 10:00:00",
+        )
+        pd.DataFrame([early, late]).to_parquet(path, index=False)
+
+        context = get_latest_etf_aw_regime_context(
+            as_of_date=date(2024, 7, 31),
+            lakehouse_root=self.lakehouse_root,
+        )
+
+        self.assertIsNotNone(context)
+        assert context is not None
+        self.assertEqual(context["market_regime_label"], "defensive")
+
+    def test_read_service_preserves_null_text_fields(self) -> None:
+        path = self._score_file_path(2024, 7)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        row = self._score_row()
+        row["signal_summary"] = None
+        pd.DataFrame([row]).to_parquet(path, index=False)
+
+        context = get_latest_etf_aw_regime_context(
+            as_of_date=date(2024, 7, 31),
+            lakehouse_root=self.lakehouse_root,
+        )
+
+        self.assertIsNotNone(context)
+        assert context is not None
+        self.assertIsNone(context["signal_summary"])
+
+    def test_invalid_snapshot_business_key_fails_without_writing_score(self) -> None:
+        row = self._row("510300.SH", "equity_large", 0.02, 0.04, 0.06)
+        row["rebalance_date"] = "bad-date"
+        self._write_snapshot([row])
+
+        result = self.service.run_bootstrap(
+            "derived.etf_aw_regime_score.build",
+            start=date(2024, 7, 1),
+            end=date(2024, 7, 31),
+        )
+
+        self.assertEqual(result["status"], RunStatus.FAILED.value)
+        self.assertEqual(result["records_written"], 0)
+
     def _row(
         self,
         sleeve_code: str,
@@ -365,7 +432,10 @@ class StageERegimeScoreTests(unittest.TestCase):
         self.service._write_etf_aw_rebalance_snapshot(pd.DataFrame(rows))
 
     def _read_score_file(self, year: int, month: int) -> pd.DataFrame:
-        path = (
+        return pd.read_parquet(self._score_file_path(year, month))
+
+    def _score_file_path(self, year: int, month: int) -> Path:
+        return (
             self.lakehouse_root
             / "derived"
             / "derived.etf_aw_regime_score"
@@ -373,7 +443,35 @@ class StageERegimeScoreTests(unittest.TestCase):
             / f"{month:02d}"
             / "part-00000.parquet"
         )
-        return pd.read_parquet(path)
+
+    def _score_row(
+        self,
+        *,
+        label: str = "risk_on",
+        scorer_name: str = "etf_aw_market_only_regime",
+        rebalance_date: date | str = date(2024, 7, 22),
+        ingested_at: str = "2024-07-22 09:00:00",
+    ) -> dict:
+        return {
+            "schema_version": "etf_aw_regime_score_v1",
+            "calendar_name": "etf_aw_v1_monthly_post_20",
+            "calendar_month": "2024-07",
+            "rebalance_date": rebalance_date,
+            "scorer_name": scorer_name,
+            "scorer_version": "v1",
+            "input_snapshot_status": "complete",
+            "scoring_status": "complete",
+            "market_regime_label": label,
+            "market_score": 70.0,
+            "confidence_score": 0.70,
+            "confidence_level": "high",
+            "confidence_cap": 0.70,
+            "signal_summary": label,
+            "signals_json": "[]",
+            "quality_notes": "{}",
+            "source_snapshot_rebalance_date": date(2024, 7, 22),
+            "ingested_at": pd.Timestamp(ingested_at),
+        }
 
 
 if __name__ == "__main__":

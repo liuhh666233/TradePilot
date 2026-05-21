@@ -86,6 +86,7 @@ _ETF_AW_REGIME_LABELS = {
 }
 _ETF_AW_REQUIRED_ROLES = {"equity_large", "equity_small", "bond", "gold", "cash"}
 _ETF_AW_DIRECTION_RULES = {
+    # Return thresholds are decimal returns, e.g. 0.015 means 1.5%.
     "return_1m": (0.015, -0.015, 0.25),
     "return_3m": (0.030, -0.030, 0.45),
     "return_6m": (0.050, -0.050, 0.30),
@@ -1691,6 +1692,16 @@ class ETLService:
                 "error_message": "ETF all-weather rebalance snapshot is missing",
             }
         score = self._make_etf_aw_regime_score_frame(snapshot)
+        if score.empty:
+            return {
+                "profile_name": _ETF_AW_REGIME_SCORE_PROFILE,
+                "dataset_name": _ETF_AW_REGIME_SCORE_DATASET,
+                "status": RunStatus.FAILED.value,
+                "requested_start": start.isoformat(),
+                "requested_end": end.isoformat(),
+                "records_written": 0,
+                "error_message": "ETF all-weather regime score has no valid rebalance keys",
+            }
         validation = _validate_regime_score_frame(score)
         if not all(validation.values()):
             return {
@@ -1716,8 +1727,8 @@ class ETLService:
             "partitions_written": write_result.partitions_written,
             "storage_paths": write_result.storage_paths,
             "validation": validation,
-            "scoring_status_counts": score["scoring_status"].value_counts().to_dict(),
-            "label_counts": score["market_regime_label"].value_counts().to_dict(),
+            "scoring_status_counts": _value_counts_dict(score["scoring_status"]),
+            "label_counts": _value_counts_dict(score["market_regime_label"]),
         }
 
     def _make_etf_aw_regime_score_frame(self, snapshot: pd.DataFrame) -> pd.DataFrame:
@@ -1725,6 +1736,7 @@ class ETLService:
         frame["rebalance_date"] = pd.to_datetime(
             frame["rebalance_date"], errors="coerce"
         ).dt.date
+        frame = frame.dropna(subset=["calendar_name", "rebalance_date"])
         rows: list[dict[str, Any]] = []
         ingested_at = _utc_now()
         group_columns = ["calendar_name", "rebalance_date"]
@@ -2676,6 +2688,10 @@ def _validate_regime_score_frame(frame: pd.DataFrame) -> dict[str, bool]:
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
+
+
+def _value_counts_dict(series: pd.Series) -> dict[str, int]:
+    return {str(key): int(value) for key, value in series.value_counts().items()}
 
 
 def _nullable_float(value: object) -> float | None:

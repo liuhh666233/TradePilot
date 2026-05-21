@@ -91,16 +91,15 @@ def get_latest_etf_aw_regime_context(
     frame = _read_etf_aw_regime_score_partitions(lakehouse_root=lakehouse_root)
     if frame.empty:
         return None
-    frame["rebalance_date"] = pd.to_datetime(
-        frame["rebalance_date"], errors="coerce"
-    ).dt.date
+    frame["rebalance_date"] = _normalize_date_series(frame["rebalance_date"])
+    frame = frame.dropna(subset=["rebalance_date"])
     if as_of_date is not None:
         frame = frame[frame["rebalance_date"] <= as_of_date].copy()
     if frame.empty:
         return None
     latest_date = max(frame["rebalance_date"].dropna().tolist())
     latest = frame[frame["rebalance_date"] == latest_date].copy()
-    latest = latest.sort_values(["scorer_name", "scorer_version", "ingested_at"])
+    latest = latest.sort_values("ingested_at")
     return _regime_contract(latest.iloc[-1])
 
 
@@ -121,9 +120,8 @@ def list_etf_aw_regime_contexts(
     )
     if frame.empty:
         return []
-    frame["rebalance_date"] = pd.to_datetime(
-        frame["rebalance_date"], errors="coerce"
-    ).dt.date
+    frame["rebalance_date"] = _normalize_date_series(frame["rebalance_date"])
+    frame = frame.dropna(subset=["rebalance_date"])
     frame = frame[frame["rebalance_date"].between(start, end, inclusive="both")]
     frame = frame.sort_values(["rebalance_date", "scorer_name", "scorer_version"])
     return [_regime_contract(row) for _, row in frame.iterrows()]
@@ -309,19 +307,19 @@ def _snapshot_contract(frame: pd.DataFrame) -> dict[str, Any]:
 def _regime_contract(row: pd.Series) -> dict[str, Any]:
     return {
         "schema_version": _ETF_AW_REGIME_SCORE_SCHEMA_VERSION,
-        "calendar_name": str(row["calendar_name"]),
-        "calendar_month": str(row["calendar_month"]),
+        "calendar_name": _optional_text(row.get("calendar_name")),
+        "calendar_month": _optional_text(row.get("calendar_month")),
         "rebalance_date": _date_text(row["rebalance_date"]),
-        "scorer_name": str(row["scorer_name"]),
-        "scorer_version": str(row["scorer_version"]),
-        "input_snapshot_status": str(row["input_snapshot_status"]),
-        "scoring_status": str(row["scoring_status"]),
-        "market_regime_label": str(row["market_regime_label"]),
+        "scorer_name": _optional_text(row.get("scorer_name")),
+        "scorer_version": _optional_text(row.get("scorer_version")),
+        "input_snapshot_status": _optional_text(row.get("input_snapshot_status")),
+        "scoring_status": _optional_text(row.get("scoring_status")),
+        "market_regime_label": _optional_text(row.get("market_regime_label")),
         "market_score": _optional_float(row.get("market_score")),
         "confidence_score": _optional_float(row.get("confidence_score")),
-        "confidence_level": str(row["confidence_level"]),
+        "confidence_level": _optional_text(row.get("confidence_level")),
         "confidence_cap": _optional_float(row.get("confidence_cap")),
-        "signal_summary": str(row["signal_summary"]),
+        "signal_summary": _optional_text(row.get("signal_summary")),
         "signals": _json_list(row.get("signals_json")),
         "quality_notes": _quality_notes(row.get("quality_notes")),
         "source_snapshot_rebalance_date": _date_text(
@@ -368,6 +366,15 @@ def _json_list(value: object) -> list[Any]:
     return loaded if isinstance(loaded, list) else [loaded]
 
 
+def _normalize_date_series(series: pd.Series) -> pd.Series:
+    parsed = pd.to_datetime(series, errors="coerce")
+    return pd.Series(
+        [value.date() if not pd.isna(value) else None for value in parsed],
+        index=series.index,
+        dtype=object,
+    )
+
+
 def _date_text(value: object) -> str | None:
     if value is None or pd.isna(value):
         return None
@@ -383,3 +390,9 @@ def _optional_float(value: object) -> float | None:
     if value is None or pd.isna(value):
         return None
     return float(value)
+
+
+def _optional_text(value: object) -> str | None:
+    if value is None or pd.isna(value):
+        return None
+    return str(value)
