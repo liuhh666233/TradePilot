@@ -26,6 +26,8 @@ _ETF_AW_SNAPSHOT_REQUIRED_COLUMNS = {
 }
 _ETF_AW_SNAPSHOT_STATUS_ORDER = ["stale", "missing", "partial", "complete"]
 _ETF_AW_SNAPSHOT_STATUSES = set(_ETF_AW_SNAPSHOT_STATUS_ORDER)
+_ETF_AW_REGIME_SCORE_DATASET = "derived.etf_aw_regime_score"
+_ETF_AW_REGIME_SCORE_SCHEMA_VERSION = "etf_aw_regime_score_v1"
 
 
 def get_latest_etf_aw_snapshot(
@@ -79,6 +81,54 @@ def list_etf_aw_snapshots(
     ]
 
 
+def get_latest_etf_aw_regime_context(
+    as_of_date: date | None = None,
+    *,
+    lakehouse_root: Path | None = None,
+) -> dict[str, Any] | None:
+    """Return the latest ETF all-weather regime context at or before a date."""
+
+    frame = _read_etf_aw_regime_score_partitions(lakehouse_root=lakehouse_root)
+    if frame.empty:
+        return None
+    frame["rebalance_date"] = pd.to_datetime(
+        frame["rebalance_date"], errors="coerce"
+    ).dt.date
+    if as_of_date is not None:
+        frame = frame[frame["rebalance_date"] <= as_of_date].copy()
+    if frame.empty:
+        return None
+    latest_date = max(frame["rebalance_date"].dropna().tolist())
+    latest = frame[frame["rebalance_date"] == latest_date].copy()
+    latest = latest.sort_values(["scorer_name", "scorer_version", "ingested_at"])
+    return _regime_contract(latest.iloc[-1])
+
+
+def list_etf_aw_regime_contexts(
+    start: date,
+    end: date,
+    *,
+    lakehouse_root: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Return ETF all-weather regime contexts in a rebalance-date window."""
+
+    if start > end:
+        start, end = end, start
+    frame = _read_etf_aw_regime_score_partitions(
+        start=start,
+        end=end,
+        lakehouse_root=lakehouse_root,
+    )
+    if frame.empty:
+        return []
+    frame["rebalance_date"] = pd.to_datetime(
+        frame["rebalance_date"], errors="coerce"
+    ).dt.date
+    frame = frame[frame["rebalance_date"].between(start, end, inclusive="both")]
+    frame = frame.sort_values(["rebalance_date", "scorer_name", "scorer_version"])
+    return [_regime_contract(row) for _, row in frame.iterrows()]
+
+
 def _read_etf_aw_snapshot_partitions(
     start: date | None = None,
     end: date | None = None,
@@ -123,6 +173,32 @@ def _read_latest_etf_aw_snapshot_partition(
     return pd.DataFrame()
 
 
+def _read_etf_aw_regime_score_partitions(
+    start: date | None = None,
+    end: date | None = None,
+    *,
+    lakehouse_root: Path | None = None,
+) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for year, month in _dataset_months(
+        _ETF_AW_REGIME_SCORE_DATASET,
+        start,
+        end,
+        lakehouse_root=lakehouse_root,
+    ):
+        path = build_dataset_file_path(
+            _ETF_AW_REGIME_SCORE_DATASET,
+            StorageZone.DERIVED,
+            [("year", year), ("month", f"{month:02d}")],
+            lakehouse_root=lakehouse_root,
+        )
+        if path.exists():
+            frames.append(pd.read_parquet(path))
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
 def _normalize_snapshot_frame(frame: pd.DataFrame) -> pd.DataFrame:
     if not _ETF_AW_SNAPSHOT_REQUIRED_COLUMNS.issubset(frame.columns):
         return pd.DataFrame()
@@ -135,7 +211,8 @@ def _normalize_snapshot_frame(frame: pd.DataFrame) -> pd.DataFrame:
     return normalized[normalized["data_status"].isin(_ETF_AW_SNAPSHOT_STATUSES)]
 
 
-def _snapshot_months(
+def _dataset_months(
+    dataset_name: str,
     start: date | None,
     end: date | None,
     *,
@@ -164,7 +241,7 @@ def _snapshot_months(
         from tradepilot.config import LAKEHOUSE_DERIVED_ROOT
 
         dataset_root = LAKEHOUSE_DERIVED_ROOT
-    root = dataset_root / _ETF_AW_SNAPSHOT_DATASET
+    root = dataset_root / dataset_name
     if not root.exists():
         return []
     months = []
@@ -176,6 +253,33 @@ def _snapshot_months(
         if upper_month is None or month <= upper_month:
             months.append(month)
     return sorted(set(months))
+
+
+def _snapshot_months(
+    start: date | None,
+    end: date | None,
+    *,
+    lakehouse_root: Path | None,
+) -> list[tuple[int, int]]:
+    if start is not None and end is not None:
+        if start > end:
+            start, end = end, start
+        months: list[tuple[int, int]] = []
+        cursor = date(start.year, start.month, 1)
+        while cursor <= end:
+            months.append((cursor.year, cursor.month))
+            if cursor.month == 12:
+                cursor = date(cursor.year + 1, 1, 1)
+            else:
+                cursor = date(cursor.year, cursor.month + 1, 1)
+        return months
+
+    return _dataset_months(
+        _ETF_AW_SNAPSHOT_DATASET,
+        start,
+        end,
+        lakehouse_root=lakehouse_root,
+    )
 
 
 def _snapshot_contract(frame: pd.DataFrame) -> dict[str, Any]:
@@ -199,6 +303,30 @@ def _snapshot_contract(frame: pd.DataFrame) -> dict[str, Any]:
         "effective_date": _date_text(first["effective_date"]),
         "data_status": status,
         "sleeves": [_sleeve_contract(row) for _, row in ordered.iterrows()],
+    }
+
+
+def _regime_contract(row: pd.Series) -> dict[str, Any]:
+    return {
+        "schema_version": _ETF_AW_REGIME_SCORE_SCHEMA_VERSION,
+        "calendar_name": str(row["calendar_name"]),
+        "calendar_month": str(row["calendar_month"]),
+        "rebalance_date": _date_text(row["rebalance_date"]),
+        "scorer_name": str(row["scorer_name"]),
+        "scorer_version": str(row["scorer_version"]),
+        "input_snapshot_status": str(row["input_snapshot_status"]),
+        "scoring_status": str(row["scoring_status"]),
+        "market_regime_label": str(row["market_regime_label"]),
+        "market_score": _optional_float(row.get("market_score")),
+        "confidence_score": _optional_float(row.get("confidence_score")),
+        "confidence_level": str(row["confidence_level"]),
+        "confidence_cap": _optional_float(row.get("confidence_cap")),
+        "signal_summary": str(row["signal_summary"]),
+        "signals": _json_list(row.get("signals_json")),
+        "quality_notes": _quality_notes(row.get("quality_notes")),
+        "source_snapshot_rebalance_date": _date_text(
+            row.get("source_snapshot_rebalance_date")
+        ),
     }
 
 
@@ -228,6 +356,16 @@ def _quality_notes(value: object) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {"raw": value}
     return loaded if isinstance(loaded, dict) else {"value": loaded}
+
+
+def _json_list(value: object) -> list[Any]:
+    if not isinstance(value, str) or not value.strip():
+        return []
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        return [{"raw": value}]
+    return loaded if isinstance(loaded, list) else [loaded]
 
 
 def _date_text(value: object) -> str | None:
